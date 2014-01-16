@@ -1,0 +1,8 @@
+*.swp
+*.swo
+*.a
+*.log
+*.tar
+*.zip
+build
+bin
