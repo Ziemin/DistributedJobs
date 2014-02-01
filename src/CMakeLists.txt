@@ -7,6 +7,8 @@ ADD_DEFINITIONS(-DBOOST_ALL_DYN_LINK)
 
 add_library(dj STATIC
     executor.cpp
+    node.cpp
+    message.cpp
 )
 
 target_link_libraries (dj ${Boost_LIBRARIES})

@@ -6,3 +6,8 @@
 *.zip
 build
 bin
+*.cmake
+CMakeFiles
+Makefile
+CMakeCache.txt
+Testing

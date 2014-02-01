@@ -27,10 +27,10 @@ foreach(file ${TEST_FILES})
     target_link_libraries (${base_name} ${Boost_SYSTEM_LIBRARY})
     target_link_libraries (${base_name} ${CMAKE_THREAD_LIBS_INIT})
 
-    # link my library ... 
+    target_link_libraries (${base_name} dj)
 
     add_test(NAME ${base_name} COMMAND ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${base_name} ${TEST_PROPS})
-    set_tests_properties(${base_name} PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/resources)
+    #set_tests_properties(${base_name} PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/resources)
 
     LIST(APPEND TEST_NAMES ${base_name})
 endforeach()
@@ -38,7 +38,7 @@ endforeach()
 message(${LIBRARY_OUTPUT_PATH})
 message("--   Tests found:")
 foreach(test ${TEST_NAMES})
-    message("--    "${test})
+    message("--    " ${test})
 endforeach()
 
 ADD_CUSTOM_TARGET(check COMMAND ${CMAKE_CTEST_COMMAND} DEPENDS ${TEST_NAMES})

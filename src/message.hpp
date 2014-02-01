@@ -21,6 +21,16 @@ namespace dj {
         std::string data;
     };
 
+    struct work_unit {
+        enum class ework_type {
+
+        };
+
+        ework_type work_type;
+        std::string type_name;
+        std::string data;
+    };
+
     namespace serialization {
 
         class serialization_exception : std::exception {
@@ -43,34 +53,32 @@ namespace dj {
 
         // serialization
         template <typename T>
-            message& operator<<(message& mes, const T& t) {
+            work_unit& operator<<(work_unit& work, const T& t) {
 
                 try {
-
                     std::ostringstream os;
                     boost::archive::binary_oarchive archive(os, boost::archive::no_header);
                     archive << typeinfo(t).name();
+                    work.type_name = os.str();
+                    os.flush();
                     archive << t;
-                    mes.data = os.str();
+                    work.data = os.str();
 
                 } catch(boost::archive::archive_exception& ae) {
                     throw serialization_exception(ae.what());
                 }
 
-                return mes;
+                return work;
             }
 
         // deserialization
         template <typename T>
-            T& operator>>(message& mes, const T& t) {
+            T& operator>>(const std::string& data, T& t) {
 
                 try {
-                    std::istringstream is(mes.data);
+                    std::istringstream is(data);
                     boost::archive::binary_iarchive archive(is, boost::archive::no_header);
-                    std::string type_id;
-                    archive >> type_id;
-                    if(typeinfo(t).name() != type_id) 
-                        throw serialization_exception("Expected: " + typeinfo(t).name(), "Got: " + type_id);
+                    archive >> t;
 
                 } catch(boost::archive::archive_exception& ae) {
                     throw serialization_exception(ae.what());
@@ -78,6 +86,11 @@ namespace dj {
 
                 return t;
             }
+
+
+        message& operator<<(message& mes, work_unit& work); 
+
+        message& operator>>(message& mes, work_unit& work);
 
     }
 }

@@ -3,115 +3,188 @@
 
 #include <functional>
 #include <vector>
+#include <memory>
+#include <unordered_map>
+#include <exception>
 
 #include "template_utils.hpp"
 #include "task.hpp"
+#include "message.hpp"
+
 
 namespace dj {
 
     enum class enode_type {
         TASK, 
         REDUCER, 
-        INPUT, 
-        OUTPUT,
-        COORDINATOR
+        COORDINATOR,
+        OUTPUT
     };
+
+    class node_exception : std::exception {
+        public:
+
+            node_exception(std::string message);
+            virtual ~node_exception() = default;;
+            virtual const char* what() const throw();
+
+        private:
+            std::string message;
+    };
+}
+
+
+namespace std {
+
+    // hash implementations for unordered_map
+    template <>
+        struct hash<pair<dj::enode_type, string>> {
+
+            typedef pair<dj::enode_type, string> argument_type;
+            typedef size_t value_type;
+
+            value_type operator()(const argument_type& argument) const {
+                const value_type hash_1(hash<uint>()(static_cast<uint>(argument.first)) * 31);
+                const value_type hash_2(hash<string>()(argument.second));
+                return hash_2 ^ (hash_1 << 1);
+            }
+        };
+
+    template <>
+        struct hash<pair<dj::enode_type, uint>> {
+
+            typedef pair<dj::enode_type, uint> argument_type;
+            typedef size_t value_type;
+
+            value_type operator()(const argument_type& argument) const {
+                const value_type hash_1(hash<uint>()(static_cast<uint>(argument.first)) * 31);
+                const value_type hash_2(hash<uint>()(argument.second));
+                return hash_2 ^ ((hash_1+31) << 1);
+            }
+        };
+}
+
+namespace dj {
+
+    class node_graph;
 
     class base_node {
-        public:
-            base_node(enode_type nt);
 
-            virtual std::string name() const = 0;
+        friend class node_graph;
+
+        public:
+            base_node(enode_type nt, std::string name);
             virtual ~base_node() = default;
+
+            std::string name() const;
             bool operator==(const base_node& other) const;
             bool operator!=(const base_node& other) const;
-            
+            int index() const;
+
+            virtual void process_work(const work_unit& work) = 0;
+
             const enode_type type;
+
+        private:
+            void set_index(int index);
+
+            std::string _name;
+            int _index = -1;
     };
 
-
-    class reducer_node;
     class coordinator_node;
-    class input_node;
 
     class task_node : public base_node {
 
+        friend class node_graph;
+
         public:
-            task_node();
+            task_node(std::string name);
             virtual ~task_node() = default;
 
-            bool add_parent(base_node* parent);
-            bool add_child(task_node* child);
-            bool add_reducer(reducer_node* reducer);
-            bool add_coordinator(coordinator_node* coordinator);
-
-            bool has_reducer() const;
-            bool has_coordinator() const;
-            const std::vector<base_node*>& parents() const;
-            const std::vector<task_node*>& children() const;
-            const reducer_node* reducer() const;
-            const coordinator_node* coordinator() const;
+            const std::vector<std::pair<uint, const task_node*>>& connected_tasks() const;
+            const std::vector<std::pair<uint, const coordinator_node*>>& connected_coorindators() const;
 
         private:
-            std::vector<base_node*> _parents;
-            std::vector<task_node*> _children_tasks;
-            reducer_node* _reducer;
-            coordinator_node* _coordinator;
+            bool add_task(uint task_num, const task_node* task);
+            bool add_coordinator(uint coordinator_num, const coordinator_node* coordinator);
+
+            std::vector<std::pair<uint, const task_node*>> edge_tasks;
+            std::vector<std::pair<uint, const coordinator_node*>> edge_coordinators;
 
     };
 
     class reducer_node : public base_node {
 
+        friend class node_graph;
+
         public:
-            reducer_node(output_node* out);
-            virtual ~reducer_node() = default;
-
-            bool add_parent(task_node* parent);
-            const std::vector<task_node*>& parents() const;
-
-        private:
-            std::vector<task_node*> _parents;
+            reducer_node(std::string name);
 
     };
 
+    class coordinator_node : public base_node {
 
-    class input_node : public base_node {
+        friend class node_graph;
 
         public:
-            input_node(task_node* first_task);
-            virtual ~input_node() = default;
+            coordinator_node(std::string name);
 
-            const task_node* task() const;
-
-        private:
-            task_node* _task;
     };
 
     class output_node : public base_node {
 
-        public:
-            output_node(base_node* provider);
-            virtual ~output_node() = default;
+        friend class node_graph;
 
-            const base_node* provider() const;
+        public:
+            output_node(std::string name);
+    };
+
+    class node_graph {
+
+        public:
+
+            int add(std::unique_ptr<task_node> task);
+            int add(std::unique_ptr<reducer_node> reducer);
+            int add(std::unique_ptr<coordinator_node> coordinator);
+            int add(std::unique_ptr<output_node> output);
+
+            int task_index(const std::string& node_name) const;
+            int reducer_index(const std::string& node_name) const;
+            int output_index(const std::string& node_name) const;
+            int coordinator_index(const std::string& node_name) const;
+
+            void add_output_to_task(uint output_index, uint task_index);
+            void add_reducer_to_task(uint reducer_index, uint task_index);
+
+            void add_output_to_reducer(uint output_index, uint reducer_index);
+
+            void add_undirected(uint task_from, uint task_to);
+            void add_directed(uint task_from, uint task_to);
+            void add_coordinator(uint coordinator_index, uint task_to);
+
+            int set_root(std::unique_ptr<task_node> node);
+            void set_root(uint index);
+            bool has_root() const;
+            const task_node* root() const;
+
+            bool is_correct() const;
 
         private:
-            base_node* _provider;
-    };
 
-    class pipeline : public task_node {
+            std::vector<std::unique_ptr<task_node>> task_nodes;
+            std::vector<std::unique_ptr<reducer_node>> reducer_nodes;
+            std::vector<std::unique_ptr<coordinator_node>> coordinator_nodes;
+            std::vector<std::unique_ptr<output_node>> output_nodes;
 
-    };
+            int root_index = -1;
 
-    class coordinator_node : public pipeline {
-
-        public:
-            coordinator_node();
-            virtual ~coordinator_node() = default;
+            std::unordered_map<std::pair<enode_type, std::string>, uint> name_to_index;
+            std::unordered_map<std::pair<enode_type, uint>, std::pair<enode_type, uint>> sink_map;
     };
 
     template <typename, typename...>
-        class node { };
+        class task { };
 
     /**
      * node class is a task container responsible for 
@@ -147,24 +220,34 @@ namespace dj {
      *  };
      */
     template <template<typename...> class Task, typename... OutputParameters, typename... InputParameters>
-        class node<Task<OutputParameters...>, InputParameters...> : public task_node {
+        class task<Task<OutputParameters...>, InputParameters...> : public task_node {
 
-            //static_assert(std::is_base_of<base_task<OutputParameters...>, Task<OutputParameters...>>);
+            template <typename T>
+                struct type_checker {
+
+                        bool operator()(const work_unit& work, Task<OutputParameters...>& task) const {
+                            if(work.type_name != typeid(T).name()) 
+                                return false;
+
+                            T t;
+                            work.data >> t;
+                            task(t);
+                            return true;
+                        }
+                };
 
             public:
 
-                virtual std::string name() const {
+                task(std::string name) : task_node(std::move(name)) { }
+
+                std::string task_name() const {
                     return _task.name();
                 }
-                /**
-                 * Run task on provided argument.
-                 * Argument has to be one of the types from InputParameters list.
-                 */
-                template <typename Arg>
-                    void run(const Arg& arg, const base_node* parent) {
-                        static_assert(is_any_same<Arg, InputParameters...>{}, "cannot provide this argument to task");
-                        _task(arg, parent);
-                    }
+
+                virtual void process_work(const work_unit& work) {
+                    if(!for_each_any<type_checker, InputParameters...>::run(work, _task))
+                            throw std::runtime_error("Input for task is not any of given types");
+                }
 
                 /**
                  * Initializes task
@@ -175,27 +258,80 @@ namespace dj {
                     }
 
             private:
+                /**
+                 * Run task on provided argument.
+                 * Argument has to be one of the types from InputParameters list.
+                 */
+                template <typename Arg>
+                    void run(const Arg& arg, const base_node* parent) {
+                        static_assert(is_any_same<Arg, InputParameters...>{}, "cannot provide this argument to task");
+                        _task(arg, parent);
+                    }
+
+            private:
                 // runnable task
                 Task<OutputParameters...> _task;
 
         };
 
 
-    template <typename Reducer, typename ReducerInput, typename PipeOutput>
-        class node<Reducer, ReducerInput, PipeOutput> : public reducer_node {
+    template <template<typename...> class Coordinator, typename CoordinatorInput, typename CoordinatorOutput>
+        class coordinator : public coordinator_node {
 
             public:
 
-                virtual std::string name() const {
+                coordinator(std::string name) : coordinator_node(std::move(name)) { }
+
+                std::string coordinator_name() const {
+                    return _coordinator.name();
+                }
+
+                template <typename... Args>
+                    void initialize_coorindator(Args&& ...args) {
+                        _coordinator.initialize(std::forward<Args>(args)...);
+                    }
+
+                    virtual void process_work(const work_unit& work) {
+
+                        if(work.type_name != typeid(CoordinatorInput).name()) 
+                            throw std::runtime_error(
+                                    std::string("Input for coordinator is not of type: ") + typeid(CoordinatorInput).name());
+
+                        CoordinatorInput  work_data;
+                        work.data >> work_data;
+
+                        _coordinator.coordinate(work_data);
+                    }
+
+            private:
+                Coordinator<CoordinatorInput, CoordinatorOutput> _coordinator;
+        };
+
+
+    template <template<typename...> class Reducer, typename PipeInput, typename ReducerInput, typename ReducerOutput>
+        class reducer : public reducer_node {
+
+            public:
+
+                reducer(std::string name) : reducer_node(std::move(name)) { }
+
+                std::string reducer_name() const {
                     return _reducer.name();
                 }
 
-                void run(const ReducerInput& input, const task_node* parent) {
-                    _reducer.reduce(input, parent);
-                }
+                virtual void process_work(const work_unit& work) {
 
-                void run(const PipeOutput& output_data) {
-                    _reducer.collect(output_data);
+                    if(work.type_name != typeid(ReducerInput).name()) 
+                        throw std::runtime_error(
+                                std::string("Input for reducer is not of type: ") + typeid(ReducerInput).name());
+
+                    ReducerInput work_data;
+                    work.data >> work_data;
+
+                    switch(work.work_type) {
+
+                    }
+
                 }
 
                 template <typename... Args>
@@ -204,7 +340,17 @@ namespace dj {
                     }
 
             private:
-                Reducer _reducer;
+
+                void run(const ReducerInput& input, const task_node* parent) {
+                    _reducer.reduce(input, parent);
+                }
+
+                void run(const ReducerOutput& output_data) {
+                    _reducer.collect(output_data);
+                }
+
+            private:
+                Reducer<PipeInput, ReducerInput, ReducerOutput> _reducer;
 
         };
 
