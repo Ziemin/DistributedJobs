@@ -3,6 +3,7 @@
 
 #include <string>
 #include <type_traits>
+#include "node.hpp"
 #include "template_utils.hpp"
 #include "executor.hpp"
 
@@ -18,9 +19,12 @@ namespace dj {
 
             std::string name() const;
             void set_executor(exec::executor* processor);
+            void set_node_index(int index);
+            int index() const;
 
         private:
             std::string _name;
+            int _index = -1;
 
         protected:
             exec::executor* processor = nullptr;
@@ -36,14 +40,36 @@ namespace dj {
                 /**
                  * this emits a result of task directed to the target of name target
                  */
-                template <typename T>
+                template <typename T, enode_type TargetType>
                     void emit(const T& value, const std::string& target="") const {
 
                         static_assert(is_any_same<T, OutputParameters...>{}, 
                                 "Cannot emit value of undeclared output parameter");
 
-                    }
+                        std::pair<uint, uint> identity = processor->get_rank_and_index_for(
+                                enode_type::TASK, index(), TargetType, target);
+                        work_unit result;
+                        result.data << value;
+                        result.index_from = index();
+                        result.index_to = identity.second;
+                        result.type_name = typeid(T).name();
+                        switch(TargetType) {
+                            case enode_type::TASK:
+                                result.work_type = work_unit::ework_type::TASK_WORK;
+                                break;
+                            case enode_type::REDUCER:
+                                result.work_type = work_unit::ework_type::REDUCER_REDUCE;
+                                break;
+                            case enode_type::COORDINATOR:
+                                result.work_type = work_unit::ework_type::COORDINATOR_COORDINATE;
+                                break;
+                            case enode_type::OUTPUT:
+                                result.work_type = work_unit::ework_type::WORK_OUTPUT;
+                                break;
+                        }
 
+                        processor->send(result, identity.first);
+                    }
         };
 
 

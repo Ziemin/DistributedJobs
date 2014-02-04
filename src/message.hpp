@@ -14,6 +14,7 @@
 
 namespace dj {
 
+    struct work_unit;
 
     /**
      * Context of te execution - contains information
@@ -29,8 +30,11 @@ namespace dj {
 
     struct message {
         message() = default;
+        message(int tag, std::string data);
         message(message&& other);
         message& operator=(message&& other);
+
+        message& operator<<(const work_unit& work); 
 
         int tag;
         std::string data;
@@ -44,6 +48,7 @@ namespace dj {
         locale_info() = default;
         locale_info(uint rank, std::string hostname, uint64_t timestamp);
         locale_info(locale_info&& other);
+        locale_info(const locale_info& other) = default;
         locale_info& operator=(locale_info&& other);
 
         static locale_info get_basic();
@@ -70,17 +75,27 @@ namespace dj {
             TASK_WORK,
             REDUCER_COLLECT,
             REDUCER_REDUCE,
-            COORDINATOR_COORDINATE
+            COORDINATOR_COORDINATE,
+            COORDINATOR_OUTPUT,
+            WORK_OUTPUT
         };
 
         work_unit(ework_type work_type, std::string data, std::string type_name, locale_info locale);
         work_unit() = default;
+        work_unit(const work_unit& other) = default;
         work_unit(work_unit&& other);
+        ~work_unit() = default;
+
+        work_unit& operator<<(const message& mes);
+
         work_unit& operator=(work_unit&& other);
+        work_unit& operator=(const work_unit& other) = default;
 
         ework_type work_type;
         std::string type_name;
         std::string data;
+        uint index_to;
+        uint index_from;
         locale_info locale;
 
         template <typename T>
@@ -147,10 +162,6 @@ namespace dj {
                 return t;
             }
 
-
-        message& operator<<(message& mes, work_unit& work); 
-
-        message& operator>>(message& mes, work_unit& work);
 
     }
 }

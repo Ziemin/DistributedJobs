@@ -10,11 +10,30 @@ namespace dj {
                 std::chrono::system_clock::now().time_since_epoch()).count();
     }
 
+    message::message(int tag, std::string data) 
+        : tag(tag), data(std::move(data)) 
+    { }
+
     message::message(message&& other) : tag(other.tag), data(std::move(other.data)) { }
 
     message& message::operator=(message&& other) {
         tag = other.tag;
         data = std::move(other.data);
+        return *this;
+    }
+
+    message& message::operator<<(const work_unit& work) {
+
+        std::ostringstream os;
+        ::boost::archive::binary_oarchive archive(os, ::boost::archive::no_header);
+        tag = static_cast<int>(work.work_type);
+        archive << work.type_name;
+        archive << work.data;
+        archive << work.locale;
+        archive << work.index_to;
+        archive << work.index_from;
+
+        data = os.str();
         return *this;
     }
 
@@ -54,30 +73,18 @@ namespace dj {
         return *this;
     }
 
-    message& operator<<(message& mes, work_unit& work) {
-
-        std::ostringstream os;
-        ::boost::archive::binary_oarchive archive(os, ::boost::archive::no_header);
-        archive << work.work_type;
-        archive << work.type_name;
-        archive << work.data;
-        archive << work.locale;
-
-        mes.data = os.str();
-
-        return mes;
-    }
-
-    message& operator>>(message& mes, work_unit& work) {
+    work_unit& work_unit::operator<<(const message& mes) {
 
         std::istringstream is(mes.data);
         ::boost::archive::binary_iarchive archive(is, ::boost::archive::no_header);
-        archive >> work.work_type;
-        archive >> work.type_name;
-        archive >> work.data;
-        archive >> work.locale;
+        work_type = static_cast<work_unit::ework_type>(mes.tag);
+        archive >> type_name;
+        archive >> data;
+        archive >> locale;
+        archive >> index_to;
+        archive >> index_from;
 
-        return mes;
+        return *this;
     }
 
 }

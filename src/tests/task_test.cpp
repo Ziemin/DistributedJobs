@@ -17,11 +17,11 @@ template <typename... Output>
         public:
             simple_task() : base_task<Output...>("simple_task") { }
 
-            void operator()(const std::string& input) {
+            void operator()(const std::string& input, const std::string& from) {
                 last_string_input = input;
             }
 
-            void operator()(int input) {
+            void operator()(int input, const std::string& from) {
                 last_int_input = input;
             }
     }; 
@@ -53,11 +53,11 @@ BOOST_AUTO_TEST_SUITE(task_test)
 
         work.data = string_input;
         work.type_name = typeid(std::string).name();
-        t.process_work(work);
+        t.process_work(work, nullptr);
 
         work.data = std::to_string(int_input);
         work.type_name = typeid(int).name();
-        t.process_work(work);
+        t.process_work(work, nullptr);
 
         BOOST_CHECK_EQUAL(int_input, last_int_input);
         BOOST_CHECK_EQUAL(string_input, last_string_input);

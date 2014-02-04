@@ -27,15 +27,6 @@ namespace dj {
         return _name;
     }
 
-    int base_node::index() const {
-        return _index;
-    }
-
-    void base_node::set_index(int index) {
-        _index = index;
-    }
-
-
     // --- task_node -----------------
     task_node::task_node(std::string name)
         : base_node(enode_type::TASK, std::move(name))
@@ -260,6 +251,30 @@ namespace dj {
         for(auto& t: reducer_nodes) t->set_executor(processor);
         for(auto& t: coordinator_nodes) t->set_executor(processor);
         for(auto& t: output_nodes) t->set_executor(processor);
+    }
+
+    task_node* node_graph::task(uint index) {
+        if(index >= task_nodes.size())
+            throw std::runtime_error("No task for index: " + std::to_string(index) + " exists");
+        return task_nodes[index].get();
+    }
+
+    reducer_node* node_graph::reducer(uint index) {
+        if(index >= reducer_nodes.size()) 
+            throw std::runtime_error("No reducer for index: " + std::to_string(index) + " exists");
+        return reducer_nodes[index].get();
+    }
+
+    coordinator_node* node_graph::coordinator(uint index) {
+        if(index >= coordinator_nodes.size()) 
+            throw std::runtime_error("No coordinator for index: " + std::to_string(index) + " exists");
+        return coordinator_nodes[index].get();
+    }
+
+    output_node* node_graph::output(uint index) {
+        if(index >= output_nodes.size()) 
+            throw std::runtime_error("No output for index: " + std::to_string(index) + " exists");
+        return output_nodes[index].get();
     }
 }
 

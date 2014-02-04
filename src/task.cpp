@@ -11,4 +11,11 @@ namespace dj {
     void base_unit::set_executor(exec::executor* processor) {
         this->processor = processor;
     }
+
+    void base_unit::set_node_index(int index) {
+        _index = index;
+    }
+    int base_unit::index() const {
+        return _index;
+    }
 }

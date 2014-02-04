@@ -8,11 +8,13 @@
 #include <exception>
 
 #include "template_utils.hpp"
-#include "task.hpp"
 #include "message.hpp"
 
 
 namespace dj {
+
+    template <typename T, typename B, typename Y> class base_reducer;
+    template <typename T, typename B> class base_coordinator;
 
     enum class enode_type {
         TASK, 
@@ -79,18 +81,17 @@ namespace dj {
             std::string name() const;
             bool operator==(const base_node& other) const;
             bool operator!=(const base_node& other) const;
-            int index() const;
 
-            virtual void process_work(const work_unit& work) = 0;
+            virtual void process_work(const work_unit& work, base_node* parent) = 0;
             virtual void set_executor(exec::executor* processor) = 0;
+            virtual void set_index(int index) = 0;
+            virtual int index() const = 0;
 
             const enode_type type;
 
         private:
-            void set_index(int index);
 
             std::string _name;
-            int _index = -1;
     };
 
     class coordinator_node;
@@ -173,6 +174,23 @@ namespace dj {
 
             void provide_executor(exec::executor* processor);
 
+            /**
+             * @throws runtime_error if no node for index exists
+             */
+            task_node* task(uint index);
+            /**
+             * @throws runtime_error if no node for index exists
+             */
+            reducer_node* reducer(uint index);
+            /**
+             * @throws runtime_error if no node for index exists
+             */
+            coordinator_node* coordinator(uint index);
+            /**
+             * @throws runtime_error if no node for index exists
+             */
+            output_node* output(uint index);
+
         private:
 
             std::vector<std::unique_ptr<task_node>> task_nodes;
@@ -228,13 +246,15 @@ namespace dj {
             template <typename T>
                 struct type_checker {
 
-                        bool operator()(const work_unit& work, Task<OutputParameters...>& task) const {
+                        bool operator()(const work_unit& work, base_node* parent, Task<OutputParameters...>& task) const {
                             if(work.type_name != typeid(T).name()) 
                                 return false;
 
                             T t;
                             work.data >> t;
-                            task(t);
+                            if(parent != nullptr) task(t, parent->name());
+                            else task(t, "");
+
                             return true;
                         }
                 };
@@ -247,12 +267,20 @@ namespace dj {
                     return _task.name();
                 }
 
+                virtual void set_index(int index) {
+                    _task.set_node_index(index);
+                }
+
+                virtual int index() const {
+                    return _task.index();
+                }
+
                 virtual void set_executor(exec::executor* processor) {
                     _task.set_executor(processor);
                 }
 
-                virtual void process_work(const work_unit& work) {
-                    if(!for_each_any<type_checker, InputParameters...>::run(work, _task))
+                virtual void process_work(const work_unit& work, base_node* parent) {
+                    if(!for_each_any<type_checker, InputParameters...>::run(work, parent, _task))
                             throw std::runtime_error("Input for task is not any of given types");
                 }
 
@@ -296,6 +324,14 @@ namespace dj {
                 std::string coordinator_name() const {
                     return _coordinator.name();
                 }
+                 
+                virtual void set_index(int index) {
+                    _coordinator.set_node_index(index);
+                }
+
+                virtual int index() const {
+                    return _coordinator.index();
+                }
 
                 virtual void set_executor(exec::executor* processor) {
                     _coordinator.set_executor(processor);
@@ -306,7 +342,7 @@ namespace dj {
                         _coordinator.initialize(std::forward<Args>(args)...);
                     }
 
-                    virtual void process_work(const work_unit& work) {
+                    virtual void process_work(const work_unit& work, base_node* parent) {
 
                         if(work.type_name != typeid(CoordinatorInput).name()) 
                             throw std::runtime_error(
@@ -315,7 +351,7 @@ namespace dj {
                         CoordinatorInput  work_data;
                         work.data >> work_data;
 
-                        _coordinator.coordinate(work_data);
+                        _coordinator.coordinate(work_data, parent->name());
                     }
 
             private:
@@ -338,11 +374,19 @@ namespace dj {
                     return _reducer.name();
                 }
 
+                virtual void set_index(int index) {
+                    _reducer.set_node_index(index);
+                }
+
+                virtual int index() const {
+                    return _reducer.index();
+                }
+
                 virtual void set_executor(exec::executor* processor) {
                     _reducer.set_executor(processor);
                 }
 
-                virtual void process_work(const work_unit& work) {
+                virtual void process_work(const work_unit& work, base_node* parent) {
 
                     if(work.type_name != typeid(ReducerInput).name() || work.type_name != typeid(ReducerOutput).name()) 
                         throw std::runtime_error(
@@ -353,7 +397,7 @@ namespace dj {
                         case work_unit::ework_type::REDUCER_REDUCE:
                             ReducerInput reduce_data;
                             work.data >> reduce_data;
-                            _reducer.reduce(reduce_data);
+                            _reducer.reduce(reduce_data, parent->name());
                             break;
                         case work_unit::ework_type::REDUCER_COLLECT:
                             ReducerOutput collect_data;
