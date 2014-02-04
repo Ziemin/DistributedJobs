@@ -254,5 +254,12 @@ namespace dj {
         // meanwhile only one reducer is available for entire graph
         return true;
     }
+
+    void node_graph::provide_executor(exec::executor* processor) {
+        for(auto& t: task_nodes) t->set_executor(processor);
+        for(auto& t: reducer_nodes) t->set_executor(processor);
+        for(auto& t: coordinator_nodes) t->set_executor(processor);
+        for(auto& t: output_nodes) t->set_executor(processor);
+    }
 }
 

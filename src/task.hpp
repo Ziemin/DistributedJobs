@@ -4,6 +4,7 @@
 #include <string>
 #include <type_traits>
 #include "template_utils.hpp"
+#include "executor.hpp"
 
 namespace dj {
 
@@ -13,14 +14,16 @@ namespace dj {
         public:
             virtual ~base_unit() = default;
 
-            base_unit(std::string name) : _name(std::move(name)) { }
+            base_unit(std::string name);
 
-            std::string name() const {
-                return _name;
-            }
+            std::string name() const;
+            void set_executor(exec::executor* processor);
 
         private:
             std::string _name;
+
+        protected:
+            exec::executor* processor = nullptr;
     };
 
     template <typename... OutputParameters>

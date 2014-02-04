@@ -1,31 +1,52 @@
 #ifndef EXECUTOR_HPP
 #define EXECUTOR_HPP
 
+#include <string>
+#include <boost/mpi.hpp>
+#include <thread>
+#include "message.hpp"
+
+namespace mpi = boost::mpi;
+
 namespace dj {
+
+    class execution_pipeline;
+
     namespace exec {
-
-        /**
-         * Context of te execution - contains information
-         * about running tasks in pipeline, parallel tasks, coordinators and reducers
-         */
-        struct Context {
-
-        };
 
         /**
          * Class responsible for executoion of pipelined tasks
          * and dispatching messages
          */
-        class Executor {
+        class executor {
 
             public:
+
+                /**
+                 * @param argv is in form - < hostname ... >
+                 * @param pipeline this executor call pipeline's provide_executor with this
+                 */
+                executor(int argc, char* argv[], execution_pipeline& pipeline);
+
                 void start();
+                context_info context() const;
 
-                void addTask();
-                void addCoordinator();
-                void addReducer();
+            private:
+                void stop_threads();
+                bool receive_data();
+
+            private:
+                mpi::environment env;
+                mpi::communicator world;
+
+                // input thread
+                std::unique_ptr<std::thread> input_thread;
+                // pipeline with all prepared jobs
+                execution_pipeline& pipeline;
+                // context of execution
+                context_info _exec_context;;
+
         };
-
     }
 }
 

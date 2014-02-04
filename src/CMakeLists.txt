@@ -4,9 +4,12 @@ find_package(Boost COMPONENTS filesystem system thread date_time serialization u
 find_package(Threads REQUIRED)
 
 ADD_DEFINITIONS(-DBOOST_ALL_DYN_LINK)
+ADD_DEFINITIONS(-DBOOST_SERIALIZATION_DYN_LINK)
 
 add_library(dj STATIC
+    pipeline.cpp
     executor.cpp
+    task.cpp
     node.cpp
     message.cpp
 )

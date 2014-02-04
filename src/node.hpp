@@ -82,6 +82,7 @@ namespace dj {
             int index() const;
 
             virtual void process_work(const work_unit& work) = 0;
+            virtual void set_executor(exec::executor* processor) = 0;
 
             const enode_type type;
 
@@ -170,6 +171,8 @@ namespace dj {
 
             bool is_correct() const;
 
+            void provide_executor(exec::executor* processor);
+
         private:
 
             std::vector<std::unique_ptr<task_node>> task_nodes;
@@ -244,6 +247,10 @@ namespace dj {
                     return _task.name();
                 }
 
+                virtual void set_executor(exec::executor* processor) {
+                    _task.set_executor(processor);
+                }
+
                 virtual void process_work(const work_unit& work) {
                     if(!for_each_any<type_checker, InputParameters...>::run(work, _task))
                             throw std::runtime_error("Input for task is not any of given types");
@@ -278,12 +285,20 @@ namespace dj {
     template <template<typename...> class Coordinator, typename CoordinatorInput, typename CoordinatorOutput>
         class coordinator : public coordinator_node {
 
+            static_assert(std::is_base_of<base_coordinator<CoordinatorInput, CoordinatorOutput>,
+                    Coordinator<CoordinatorInput, CoordinatorOutput>>::value, 
+                    "Coordinator is not derived class of base_coordinator");
+
             public:
 
                 coordinator(std::string name) : coordinator_node(std::move(name)) { }
 
                 std::string coordinator_name() const {
                     return _coordinator.name();
+                }
+
+                virtual void set_executor(exec::executor* processor) {
+                    _coordinator.set_executor(processor);
                 }
 
                 template <typename... Args>
@@ -311,6 +326,10 @@ namespace dj {
     template <template<typename...> class Reducer, typename PipeInput, typename ReducerInput, typename ReducerOutput>
         class reducer : public reducer_node {
 
+            static_assert(std::is_base_of<base_reducer<PipeInput, ReducerInput, ReducerOutput>,
+                    Reducer<PipeInput, ReducerInput, ReducerOutput>>::value, 
+                    "Reducer is not derived class of base_reducer");
+
             public:
 
                 reducer(std::string name) : reducer_node(std::move(name)) { }
@@ -319,19 +338,31 @@ namespace dj {
                     return _reducer.name();
                 }
 
+                virtual void set_executor(exec::executor* processor) {
+                    _reducer.set_executor(processor);
+                }
+
                 virtual void process_work(const work_unit& work) {
 
-                    if(work.type_name != typeid(ReducerInput).name()) 
+                    if(work.type_name != typeid(ReducerInput).name() || work.type_name != typeid(ReducerOutput).name()) 
                         throw std::runtime_error(
                                 std::string("Input for reducer is not of type: ") + typeid(ReducerInput).name());
 
-                    ReducerInput work_data;
-                    work.data >> work_data;
-
                     switch(work.work_type) {
 
+                        case work_unit::ework_type::REDUCER_REDUCE:
+                            ReducerInput reduce_data;
+                            work.data >> reduce_data;
+                            _reducer.reduce(reduce_data);
+                            break;
+                        case work_unit::ework_type::REDUCER_COLLECT:
+                            ReducerOutput collect_data;
+                            work.data >> collect_data;
+                            _reducer.collect(collect_data);
+                            break;
+                        default:
+                            throw std::runtime_error("Wrong ework_type for reducer");
                     }
-
                 }
 
                 template <typename... Args>

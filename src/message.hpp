@@ -12,24 +12,87 @@
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/archive/binary_iarchive.hpp>
 
-
 namespace dj {
 
 
-    struct message {
+    /**
+     * Context of te execution - contains information
+     * about running tasks in pipeline, parallel tasks, coordinators and reducers
+     */
+    struct context_info {
+        uint rank;
+        uint size;
+        std::string hostname;
 
+        static uint64_t get_current_timestamp();
+    };
+
+    struct message {
+        message() = default;
+        message(message&& other);
+        message& operator=(message&& other);
+
+        int tag;
         std::string data;
     };
 
-    struct work_unit {
-        enum class ework_type {
+    namespace exec { class executor; }
 
+    struct locale_info {
+        friend class exec::executor;
+
+        locale_info() = default;
+        locale_info(uint rank, std::string hostname, uint64_t timestamp);
+        locale_info(locale_info&& other);
+        locale_info& operator=(locale_info&& other);
+
+        static locale_info get_basic();
+
+        uint rank;
+        std::string hostname;
+        uint64_t timestamp;
+
+        private:
+            static const context_info* _context;
+
+            friend class boost::serialization::access;
+            template<class Archive> void serialize(Archive& ar, const unsigned int /* version */) {
+                ar & rank;
+                ar & hostname;
+                ar & timestamp;
+            }
+    };
+
+    struct work_unit {
+
+        enum class ework_type {
+            INPUT_WORK,
+            TASK_WORK,
+            REDUCER_COLLECT,
+            REDUCER_REDUCE,
+            COORDINATOR_COORDINATE
         };
+
+        work_unit(ework_type work_type, std::string data, std::string type_name, locale_info locale);
+        work_unit() = default;
+        work_unit(work_unit&& other);
+        work_unit& operator=(work_unit&& other);
 
         ework_type work_type;
         std::string type_name;
         std::string data;
+        locale_info locale;
+
+        template <typename T>
+            static work_unit get_basic(const T& t, work_unit::ework_type work_type) {
+
+                std::ostringstream os;
+                boost::archive::binary_oarchive archive(os, boost::archive::no_header);
+                archive << t;
+                return work_unit(work_type, os.str(), typeid(T).name(), locale_info::get_basic());
+            }
     };
+
 
     namespace serialization {
 
@@ -53,22 +116,19 @@ namespace dj {
 
         // serialization
         template <typename T>
-            work_unit& operator<<(work_unit& work, const T& t) {
+            std::string& operator<<(std::string& data, const T& t) {
 
                 try {
                     std::ostringstream os;
                     boost::archive::binary_oarchive archive(os, boost::archive::no_header);
-                    archive << typeinfo(t).name();
-                    work.type_name = os.str();
-                    os.flush();
                     archive << t;
-                    work.data = os.str();
+                    data = os.str();
 
                 } catch(boost::archive::archive_exception& ae) {
                     throw serialization_exception(ae.what());
                 }
 
-                return work;
+                return data;
             }
 
         // deserialization
