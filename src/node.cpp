@@ -60,20 +60,40 @@ namespace dj {
 
 
     // --- reducer_node -----------------
-    reducer_node::reducer_node(std::string name)
-        : base_node(enode_type::REDUCER, std::move(name)) 
+    reducer_node::reducer_node(std::string name, ereducer_type reducer_type)
+        : base_node(enode_type::REDUCER, std::move(name)),
+        reducer_type(reducer_type)
     { }
+
+    void reducer_node::set_reducers_count(int number) {
+        _reducers_count = number;
+    }
+    int reducer_node::reducers_count() const {
+        return _reducers_count;
+    }
 
     // --- coorindator_node -----------------
     coordinator_node::coordinator_node(std::string name)
         : base_node(enode_type::COORDINATOR, std::move(name)) 
     { }
 
+    bool coordinator_node::add_task(uint task_num, const task_node* task) {
+        auto new_task = std::make_pair(task_num, task);
+        // check if such task is already added
+        for(auto &t: edge_tasks) if(new_task == t) return false;
+
+        edge_tasks.emplace_back(task_num, task);
+        return true;
+    }
+
+    const std::vector<std::pair<uint, const task_node*>>& coordinator_node::connected_tasks() const {
+        return edge_tasks;
+    }
+
     // --- output_node -----------------
     output_node::output_node(std::string name)
         : base_node(enode_type::OUTPUT, std::move(name)) 
     { }
-
 
     // --- node_graph -----------------
 
@@ -275,6 +295,22 @@ namespace dj {
         if(index >= output_nodes.size()) 
             throw std::runtime_error("No output for index: " + std::to_string(index) + " exists");
         return output_nodes[index].get();
+    }
+
+    std::vector<std::unique_ptr<task_node>>& node_graph::get_task_nodes() {
+        return task_nodes;
+    }
+
+    std::vector<std::unique_ptr<reducer_node>>& node_graph::get_reducer_nodes() {
+        return reducer_nodes;
+    }
+
+    std::vector<std::unique_ptr<coordinator_node>>& node_graph::get_coordinator_nodes() {
+        return coordinator_nodes;
+    }
+
+    std::vector<std::unique_ptr<output_node>>& node_graph::get_output_nodes() {
+        return output_nodes;
     }
 }
 

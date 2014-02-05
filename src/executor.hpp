@@ -5,6 +5,8 @@
 #include <boost/mpi.hpp>
 #include <boost/lockfree/queue.hpp>
 #include <thread>
+#include <atomic>
+#include <unordered_map>
 #include "message.hpp"
 
 namespace mpi = boost::mpi;
@@ -42,16 +44,26 @@ namespace dj {
                 void send(const work_unit& work, int to);
                 void send(const message& mes, int to);
 
-                // throws if not found
+                /**
+                 * if target is empty and from_n_type is reducer, connected output_node's identity is returned
+                 * if target is emtpy and there are more than one node possible to localize fo given node
+                 * an arbitrary choice dependent on implementation is returned
+                 * @return pair of (rank, index) of nodes
+                 */
                 std::pair<uint, uint> get_rank_and_index_for(enode_type from_n_type, int from_index, 
                         enode_type to_n_type, const std::string& dest) const;
+
+                uint get_root_reducer_rank(uint reducer_index);
 
                 execution_pipeline& get_pipeline();
 
             private:
+                void set_reducers();
+                void set_coordinators();
                 void stop_threads();
                 void request_data();
                 void compute_work(work_unit& work);
+                void eof_callback();
 
             private:
                 mpi::environment env;
@@ -70,7 +82,13 @@ namespace dj {
                 // pipeline with all prepared jobs
                 execution_pipeline& pipeline;
                 // context of execution
-                context_info _exec_context;;
+                context_info _exec_context;
+
+                std::unordered_map<uint, std::vector<uint>> reducers_ranks;
+                std::unordered_map<uint, uint> reducers_roots;
+                std::unordered_map<uint, uint> coordinator_ranks;
+
+                std::atomic_bool encountered_eof;
 
         };
     }

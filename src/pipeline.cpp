@@ -6,6 +6,10 @@ namespace dj {
         this->processor = processor;
     }
 
+    void input_provider::set_eof_callback(std::function<void()> eof_callback) {
+        this->eof_callback = eof_callback;
+    }
+
     execution_pipeline::execution_pipeline() 
     : _inputer(new input::multi_stdin_input<int>()) 
     { }

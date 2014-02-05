@@ -2,8 +2,8 @@
 #define PIPELINE_HPP
 
 #include <iostream>
-#include "message.hpp"
 #include "node.hpp"
+#include "executor.hpp"
 
 namespace dj {
 
@@ -20,14 +20,17 @@ namespace dj {
             virtual void operator()() = 0;
 
             void set_executor(exec::executor* processor);
+            void set_eof_callback(std::function<void()> eof_callback);
 
         protected:
             exec::executor* processor = nullptr;
 
             template <typename InputType>
                 void add_input(const InputType& input) {
-                    work_unit work = work_unit::get_basic(input, work_unit::ework_type::INPUT_WORK);
+                    processor->enqueue_input(input);
                 }
+
+            std::function<void()> eof_callback;
     };
 
     namespace input {
@@ -36,7 +39,9 @@ namespace dj {
          */
         template <typename T> 
             class multi_stdin_input : public input_provider {
+
                 public:
+
                     virtual void operator()() {
 
                         T in_val;
@@ -44,6 +49,7 @@ namespace dj {
                             std::cin >> in_val;
                             add_input(in_val);
                         }
+                        eof_callback();
                     }
             };
         

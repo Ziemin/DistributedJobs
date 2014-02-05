@@ -75,9 +75,11 @@ namespace dj {
             TASK_WORK,
             REDUCER_COLLECT,
             REDUCER_REDUCE,
+            REDUCER_END,
             COORDINATOR_COORDINATE,
             COORDINATOR_OUTPUT,
-            WORK_OUTPUT
+            REDUCER_WORK_OUTPUT,
+            TASK_WORK_OUTPUT
         };
 
         work_unit(ework_type work_type, std::string data, std::string type_name, locale_info locale);

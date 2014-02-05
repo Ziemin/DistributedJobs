@@ -15,6 +15,7 @@ namespace dj {
 
     template <typename T, typename B, typename Y> class base_reducer;
     template <typename T, typename B> class base_coordinator;
+    template <typename T> class base_outputer;
 
     enum class enode_type {
         TASK, 
@@ -121,8 +122,24 @@ namespace dj {
         friend class node_graph;
 
         public:
-            reducer_node(std::string name);
+            
+            enum class ereducer_type {
+                SINGLE,             // only on physical reducer exists
+                MULTIPLE_DYNAMIC,   // multiple number of physical reducers exists, it can be changed 
+                MULTIPLE_FIXED      // fixed number of multiple reducers exists
+            };
+            const ereducer_type reducer_type;
 
+            reducer_node(std::string name, ereducer_type reducer_type);
+
+            //current implementation sets count to world.size()
+            void set_reducers_count(int number);
+            int reducers_count() const;
+            virtual void set_as_root(bool value) = 0;
+
+        private:
+
+            int _reducers_count = 1;
     };
 
     class coordinator_node : public base_node {
@@ -131,6 +148,12 @@ namespace dj {
 
         public:
             coordinator_node(std::string name);
+
+            const std::vector<std::pair<uint, const task_node*>>& connected_tasks() const;
+
+        private:
+            bool add_task(uint task_num, const task_node* task);
+            std::vector<std::pair<uint, const task_node*>> edge_tasks;
 
     };
 
@@ -190,6 +213,11 @@ namespace dj {
              * @throws runtime_error if no node for index exists
              */
             output_node* output(uint index);
+
+            std::vector<std::unique_ptr<task_node>>& get_task_nodes();
+            std::vector<std::unique_ptr<reducer_node>>& get_reducer_nodes();
+            std::vector<std::unique_ptr<coordinator_node>>& get_coordinator_nodes();
+            std::vector<std::unique_ptr<output_node>>& get_output_nodes();
 
         private:
 
@@ -342,17 +370,17 @@ namespace dj {
                         _coordinator.initialize(std::forward<Args>(args)...);
                     }
 
-                    virtual void process_work(const work_unit& work, base_node* parent) {
+                virtual void process_work(const work_unit& work, base_node* parent) {
 
-                        if(work.type_name != typeid(CoordinatorInput).name()) 
-                            throw std::runtime_error(
-                                    std::string("Input for coordinator is not of type: ") + typeid(CoordinatorInput).name());
+                    if(work.type_name != typeid(CoordinatorInput).name()) 
+                        throw std::runtime_error(
+                                std::string("Input for coordinator is not of type: ") + typeid(CoordinatorInput).name());
 
-                        CoordinatorInput  work_data;
-                        work.data >> work_data;
+                    CoordinatorInput  work_data;
+                    work.data >> work_data;
 
-                        _coordinator.coordinate(work_data, parent->name());
-                    }
+                    _coordinator.coordinate(work_data, parent->name());
+                }
 
             private:
                 Coordinator<CoordinatorInput, CoordinatorOutput> _coordinator;
@@ -368,7 +396,9 @@ namespace dj {
 
             public:
 
-                reducer(std::string name) : reducer_node(std::move(name)) { }
+                reducer(std::string name, ereducer_type reducer_type) 
+                    : reducer_node(std::move(name), reducer_type) 
+                { }
 
                 std::string reducer_name() const {
                     return _reducer.name();
@@ -386,6 +416,10 @@ namespace dj {
                     _reducer.set_executor(processor);
                 }
 
+                virtual void set_as_root(bool value) {
+                    _reducer.set_as_root(value);
+                }
+
                 virtual void process_work(const work_unit& work, base_node* parent) {
 
                     if(work.type_name != typeid(ReducerInput).name() || work.type_name != typeid(ReducerOutput).name()) 
@@ -395,14 +429,21 @@ namespace dj {
                     switch(work.work_type) {
 
                         case work_unit::ework_type::REDUCER_REDUCE:
-                            ReducerInput reduce_data;
-                            work.data >> reduce_data;
-                            _reducer.reduce(reduce_data, parent->name());
+                            {
+                                ReducerInput reduce_data;
+                                work.data >> reduce_data;
+                                _reducer.reduce(reduce_data, parent->name());
+                            }
                             break;
                         case work_unit::ework_type::REDUCER_COLLECT:
-                            ReducerOutput collect_data;
-                            work.data >> collect_data;
-                            _reducer.collect(collect_data);
+                            {
+                                ReducerOutput collect_data;
+                                work.data >> collect_data;
+                                _reducer.collect(collect_data);
+                            }
+                            break;
+                        case work_unit::ework_type::REDUCER_END:
+                            _reducer.handle_finish();
                             break;
                         default:
                             throw std::runtime_error("Wrong ework_type for reducer");
@@ -429,6 +470,53 @@ namespace dj {
 
         };
 
+    template <template<typename...> class Outputer, typename OutputerInput>
+        class outputer : public output_node {
+
+            static_assert(std::is_base_of<base_outputer<OutputerInput>,
+                    Outputer<OutputerInput>>::value, 
+                    "Coordinator is not derived class of base_coordinator");
+
+            public:
+
+                outputer(std::string name) : output_node(std::move(name)) { }
+
+                std::string outputer_name() const {
+                    return _outputer.name();
+                }
+                 
+                virtual void set_index(int index) {
+                    _outputer.set_node_index(index);
+                }
+
+                virtual int index() const {
+                    return _outputer.index();
+                }
+
+                virtual void set_executor(exec::executor* processor) {
+                    _outputer.set_executor(processor);
+                }
+
+                template <typename... Args>
+                    void initialize_outputer(Args&& ...args) {
+                        _outputer.initialize(std::forward<Args>(args)...);
+                    }
+
+                virtual void process_work(const work_unit& work, base_node* parent) {
+
+                    if(work.type_name != typeid(OutputerInput).name()) 
+                        throw std::runtime_error(
+                                std::string("Input for outputer is not of type: ") + typeid(OutputerInput).name());
+
+                    OutputerInput  work_data;
+                    work.data >> work_data;
+
+                    _outputer()(work_data, parent->name());
+                }
+
+            private:
+                Outputer<OutputerInput> _outputer;
+        };
 }
 
 #endif
