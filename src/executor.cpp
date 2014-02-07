@@ -10,7 +10,12 @@ namespace dj {
     namespace exec {
 
         inline bool is_work_tag(int tag) {
-            return (tag >= 0 && tag <= static_cast<int>(work_unit::ework_type::COORDINATOR_COORDINATE));
+            return (tag >= 0 && tag <= static_cast<int>(work_unit::ework_type::TASK_WORK_OUTPUT));
+        }
+
+        inline bool is_end_tag(int tag) {
+            return (tag >= static_cast<int>(end_message::eend_message_type::TASK_END) 
+                    && tag <= static_cast<int>(end_message::eend_message_type::WORK_END));
         }
 
         executor::executor(int argc, char* argv[], execution_pipeline& pipeline)
@@ -44,37 +49,75 @@ namespace dj {
                 throw std::runtime_error("given graph in pipeline is not correct");
 
             encountered_eof = false;
+            bool had_work = false;
 
             input_thread.reset(new std::thread([this]() { pipeline.get_input_provider()(); }));
-            bool is_finished = false;
+            is_finished = false;
             bool pending_request = false;
+            sent_task_end = false;
+            sent_reduction_end = false;
+            sent_work_end = false;
+            finished = 0;
+            current_pass = 0;
+            c_s = computation_stage::INPUT_READ;
 
+            std::unique_ptr<work_unit> new_work;
+            std::unique_ptr<end_message> end_mes;
             while(!is_finished) {
 
+                // send request if it is not sent already
                 if(!pending_request) {
                     request_data();
                     pending_request = true;
                 }
 
-                std::unique_ptr<work_unit> new_work;
+                // process work in queue
                 work_unit* work_ptr;
+                had_work = false;
                 while(qd_work.pop(work_ptr)) {
-
+                    had_work = true;
                     new_work.reset(work_ptr);
                     compute_work(*new_work);
                 }
+                // process messages related to final pass
+                while(!end_que.empty()) {
+                    end_mes.reset(end_que.front());
+                    end_que.pop_front();
+                    process_end_message(*end_mes.get(), had_work);
+                    // TODO passing again in reducers is ignored in current implementatino
+                }
 
+                // check if new messages appeard
                 if(req_status && !is_finished) {
                     pending_request = false;
+                    // enqueue new work
                     if(is_work_tag(req_status->tag())) {
                         message mes = { req_status->tag(), buffer };
                         work_ptr = new work_unit();
                         *work_ptr << mes;
                         qd_work.push(work_ptr);
-                    } else {
+                    // enqueue end messages
+                    } else if(is_end_tag(req_status->tag())) {
+                        message mes = { req_status->tag(), buffer };
+                        end_message* end_ptr = new end_message();
+                        *end_ptr << mes;
+                        end_que.push_back(end_ptr);
+                    } else { // something is fucked up
                         throw std::runtime_error("Unrecognized tag: " + std::to_string(req_status->tag()));
                     }
-                } 
+                // check if we should start a "circle of death"
+                } else if(encountered_eof && !had_work) {
+                    if(!sent_task_end) {
+                        tell_about_the_end(end_message::eend_message_type::TASK_END, 1);
+                        sent_task_end = true;
+                    } else if(!sent_reduction_end) {
+                        tell_about_the_end(end_message::eend_message_type::REDUCTION_END, 1);
+                        sent_reduction_end = true;
+                    } else if(!sent_work_end) {
+                        tell_about_the_end(end_message::eend_message_type::WORK_END, 1);
+                        sent_reduction_end = true;
+                    }
+                }
             }
 
             stop_threads();
@@ -109,12 +152,6 @@ namespace dj {
                         reducer_node* reducer_ptr = graph.reducer(work.index_to);
                         task_node* from = graph.task(work.index_from);
                         reducer_ptr->process_work(work, from);
-                    }
-                    break;
-                case work_unit::ework_type::REDUCER_END:
-                    {
-                        reducer_node* reducer_ptr = graph.reducer(work.index_to);
-                        reducer_ptr->process_work(work, nullptr);
                     }
                     break;
                 case work_unit::ework_type::COORDINATOR_COORDINATE:
@@ -213,13 +250,13 @@ namespace dj {
                 if(to == -1) // send to all other and process work myself
                     qd_work.push(new work_unit(work));
 
-                send(mes, to);
+                async_send(mes, to);
             } else {
                 qd_work.push(new work_unit(work));
             }
         }
 
-        void executor::send(const message& mes, int to) {
+        void executor::async_send(const message& mes, int to) {
 
             if(to == -1) { // send to all others
                 for(uint i = 0; i < _exec_context.size; i++) {
@@ -230,6 +267,90 @@ namespace dj {
                 world.isend(to, mes.tag, mes.data);
             } else
                 throw std::runtime_error("Cannot send message to myself");
+        }
+
+        void executor::send(const message& mes, int to) {
+
+            if(to == -1) { // send to all others
+                for(uint i = 0; i < _exec_context.size; i++) {
+                    if(i == _exec_context.rank) continue;
+                    world.send(i, mes.tag, mes.data);
+                }
+            } else if(to != (int)_exec_context.rank) {
+                world.send(to, mes.tag, mes.data);
+            } else
+                throw std::runtime_error("Cannot send message to myself");
+        }
+
+        void executor::tell_about_the_end(end_message::eend_message_type end_type, uint done) {
+
+            end_message end_mes;
+            end_mes = { _exec_context.rank, current_pass, done, end_type }; 
+            message mes;
+            mes << end_mes;
+
+            send(mes, (_exec_context.rank+1)%_exec_context.size);
+        }
+
+        void executor::process_end_message(end_message& mes, bool had_work) {
+
+            switch(mes.end_type) {
+                case end_message::eend_message_type::TASK_END:
+                    // already finished that stage of work
+                    if(c_s != computation_stage::INPUT_READ) break;
+                    if(mes.from_rank == _exec_context.rank) { // our message finished its circle
+                        // we had some work, probably propagated it, we should get back from finishing
+                        if(had_work) {
+                            sent_task_end = false;
+                        } else if(mes.finished_count == _exec_context.size) {
+                            // now we can finish all tasks - everyone is done with them
+                            finish_all_tasks();
+                            c_s = computation_stage::TASKS_END;
+                        }
+                    } else {
+                        if(!had_work) mes.finished_count++;
+                        message e_mes;
+                        e_mes << mes;
+
+                        send(e_mes, (_exec_context.rank+1)%_exec_context.size);
+                    }
+                    break;
+                case end_message::eend_message_type::REDUCTION_END:
+                    if(c_s != computation_stage::TASKS_END) break;
+                    if(mes.from_rank == _exec_context.rank) { // our message finished its circle
+                        if(had_work) {
+                            sent_reduction_end = false;
+                        } else if(mes.finished_count == _exec_context.size) {
+                            // now we can finish all reducers - everyone is done with them
+                            finish_all_reducers();
+                            c_s = computation_stage::REDUCTION_END;
+                        }
+                    } else {
+                        if(!had_work) mes.finished_count++;
+                        message e_mes;
+                        e_mes << mes;
+
+                        send(e_mes, (_exec_context.rank+1)%_exec_context.size);
+                    }
+                    break;
+                case end_message::eend_message_type::WORK_END:
+                    if(c_s != computation_stage::REDUCTION_END) break;
+                    if(mes.from_rank == _exec_context.rank) { // our message finished its circle
+                        if(had_work) {
+                            sent_work_end = false;
+                        } else if(mes.finished_count == _exec_context.size) {
+                            // now we can finish the pass
+                            is_finished = true;
+                            c_s = computation_stage::WORK_END;
+                        }
+                    } else {
+                        if(!had_work) mes.finished_count++;
+                        message e_mes;
+                        e_mes << mes;
+
+                        send(e_mes, (_exec_context.rank+1)%_exec_context.size);
+                    }
+            }
         }
 
         std::pair<uint, uint> executor::get_rank_and_index_for(enode_type from_n_type, int from_index, 
@@ -248,7 +369,7 @@ namespace dj {
                         case enode_type::OUTPUT:
                             {
                                 if(!dest.empty()) {
-                                     return std::make_pair(_exec_context.rank, graph.output_index(dest));
+                                    return std::make_pair(_exec_context.rank, graph.output_index(dest));
                                 } else if(!graph.get_output_nodes().empty()){
                                     // just return the first one TODO something smarter
                                     return std::make_pair(_exec_context.rank, graph.get_output_nodes()[0]->index());
@@ -328,6 +449,18 @@ namespace dj {
             if(it == end(reducers_roots)) 
                 throw node_exception("No reducer for index: " + std::to_string(reducer_index));
             return it->second;
+        }
+
+        void executor::finish_all_tasks() {
+
+            auto& tasks = pipeline.get_node_graph().get_task_nodes();
+            for(auto& t: tasks) t->handle_finish();
+        }
+
+        void executor::finish_all_reducers() {
+
+            auto& reducers = pipeline.get_node_graph().get_reducer_nodes();
+            for(auto& r: reducers) r->handle_finish();
         }
 
     }

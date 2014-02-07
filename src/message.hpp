@@ -15,6 +15,7 @@
 namespace dj {
 
     struct work_unit;
+    struct end_message;
 
     /**
      * Context of te execution - contains information
@@ -35,6 +36,7 @@ namespace dj {
         message& operator=(message&& other);
 
         message& operator<<(const work_unit& work); 
+        message& operator<<(const end_message& end_mes); 
 
         int tag;
         std::string data;
@@ -75,7 +77,6 @@ namespace dj {
             TASK_WORK,
             REDUCER_COLLECT,
             REDUCER_REDUCE,
-            REDUCER_END,
             COORDINATOR_COORDINATE,
             COORDINATOR_OUTPUT,
             REDUCER_WORK_OUTPUT,
@@ -110,6 +111,19 @@ namespace dj {
             }
     };
 
+    struct end_message {
+        uint from_rank;
+        uint pass_number; 
+        uint finished_count; // how many processes are finished in this pass with defined end_type
+        enum class eend_message_type {
+            TASK_END = static_cast<int>(work_unit::ework_type::TASK_WORK_OUTPUT),
+            REDUCTION_END,
+            WORK_END
+        };
+        eend_message_type end_type;
+
+        end_message& operator<<(const message& mes);
+    };
 
     namespace serialization {
 
@@ -163,8 +177,6 @@ namespace dj {
 
                 return t;
             }
-
-
     }
 }
 

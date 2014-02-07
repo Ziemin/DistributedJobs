@@ -37,6 +37,18 @@ namespace dj {
         return *this;
     }
 
+    message& message::operator<<(const end_message& mes) {
+        std::ostringstream os;
+        ::boost::archive::binary_oarchive archive(os, ::boost::archive::no_header);
+        tag = static_cast<int>(mes.end_type);
+        archive << mes.from_rank;
+        archive << mes.pass_number;
+        archive << mes.finished_count;
+
+        data = os.str();
+        return *this;
+    }
+
     locale_info::locale_info(uint rank, std::string hostname, uint64_t timestamp) 
         : rank(rank), hostname(std::move(hostname)), timestamp(timestamp) 
     { }
@@ -87,6 +99,17 @@ namespace dj {
         return *this;
     }
 
+    end_message& end_message::operator<<(const message& mes) {
+
+        std::istringstream is(mes.data);
+        ::boost::archive::binary_iarchive archive(is, ::boost::archive::no_header);
+        end_type = static_cast<end_message::eend_message_type>(mes.tag);
+        archive >> from_rank;
+        archive >> pass_number;
+        archive >> finished_count;
+
+        return *this;
+    }
 }
 
 // this class has a default constructor

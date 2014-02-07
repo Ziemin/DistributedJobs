@@ -24,6 +24,10 @@ template <typename... Output>
             void operator()(int input, const std::string& from) {
                 last_int_input = input;
             }
+
+            virtual void handle_finish() {
+                // do nothing
+            }
     }; 
 
 void operator>>(std::string input, std::string& output) {

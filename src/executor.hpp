@@ -7,6 +7,7 @@
 #include <thread>
 #include <atomic>
 #include <unordered_map>
+#include <deque>
 #include "message.hpp"
 
 namespace mpi = boost::mpi;
@@ -42,6 +43,7 @@ namespace dj {
                     }
 
                 void send(const work_unit& work, int to);
+                void async_send(const message& mes, int to);
                 void send(const message& mes, int to);
 
                 /**
@@ -64,13 +66,25 @@ namespace dj {
                 void request_data();
                 void compute_work(work_unit& work);
                 void eof_callback();
+                void tell_about_the_end(end_message::eend_message_type end_type, uint done); // sounds so sad...
+
+                void process_end_message(end_message& mes, bool had_work);
+
+                void finish_all_tasks();
+                void finish_all_reducers();
 
             private:
+
+                enum class computation_stage { INPUT_READ, TASKS_END, REDUCTION_END, WORK_END } c_s;
                 mpi::environment env;
                 mpi::communicator world;
 
                 // nonblocking queue with work to be processed
                 boost::lockfree::queue<work_unit*> qd_work;
+                uint finished;
+                uint current_pass;
+
+                std::deque<end_message*> end_que;
                 // mpi request
                 boost::mpi::request receive_request;
                 boost::optional<mpi::status> req_status;
@@ -90,6 +104,10 @@ namespace dj {
 
                 std::atomic_bool encountered_eof;
 
+                bool is_finished;
+                bool sent_task_end;
+                bool sent_reduction_end;
+                bool sent_work_end;
         };
     }
 }

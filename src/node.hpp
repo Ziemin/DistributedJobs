@@ -84,6 +84,7 @@ namespace dj {
             bool operator!=(const base_node& other) const;
 
             virtual void process_work(const work_unit& work, base_node* parent) = 0;
+            virtual void handle_finish() = 0;
             virtual void set_executor(exec::executor* processor) = 0;
             virtual void set_index(int index) = 0;
             virtual int index() const = 0;
@@ -307,6 +308,10 @@ namespace dj {
                     _task.set_executor(processor);
                 }
 
+                virtual void handle_finish() {
+                    _task.handle_finish();
+                }
+
                 virtual void process_work(const work_unit& work, base_node* parent) {
                     if(!for_each_any<type_checker, InputParameters...>::run(work, parent, _task))
                             throw std::runtime_error("Input for task is not any of given types");
@@ -365,6 +370,10 @@ namespace dj {
                     _coordinator.set_executor(processor);
                 }
 
+                virtual void handle_finish() {
+                    _coordinator.handle_finish();
+                }
+
                 template <typename... Args>
                     void initialize_coorindator(Args&& ...args) {
                         _coordinator.initialize(std::forward<Args>(args)...);
@@ -420,6 +429,10 @@ namespace dj {
                     _reducer.set_as_root(value);
                 }
 
+                virtual void handle_finish() {
+                    _reducer.handle_finish();
+                }
+
                 virtual void process_work(const work_unit& work, base_node* parent) {
 
                     if(work.type_name != typeid(ReducerInput).name() || work.type_name != typeid(ReducerOutput).name()) 
@@ -441,9 +454,6 @@ namespace dj {
                                 work.data >> collect_data;
                                 _reducer.collect(collect_data);
                             }
-                            break;
-                        case work_unit::ework_type::REDUCER_END:
-                            _reducer.handle_finish();
                             break;
                         default:
                             throw std::runtime_error("Wrong ework_type for reducer");
@@ -501,6 +511,10 @@ namespace dj {
                     void initialize_outputer(Args&& ...args) {
                         _outputer.initialize(std::forward<Args>(args)...);
                     }
+
+                virtual void handle_finish() {
+                    _outputer.handle_finish();
+                }
 
                 virtual void process_work(const work_unit& work, base_node* parent) {
 

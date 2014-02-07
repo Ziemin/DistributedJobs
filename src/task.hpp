@@ -22,6 +22,8 @@ namespace dj {
             void set_node_index(int index);
             int index() const;
 
+            virtual void handle_finish() = 0; // no more data will be delivered in this pass
+
         private:
             std::string _name;
             int _index = -1;
@@ -52,6 +54,7 @@ namespace dj {
                         result.data << value;
                         result.type_name = typeid(T).name();
                         result.index_from = index();
+                        result.locale = locale_info::get_basic();
 
                         std::pair<uint, uint> identity;
 
@@ -118,7 +121,6 @@ namespace dj {
 
                 virtual void reduce(const InputType& input, const std::string& parent) = 0;
                 virtual void collect(const OutputType& data_to_collect) = 0;
-                virtual void handle_finish() = 0; // no more data will be delivered to this reducer
 
                 bool is_root_reducer() const {
                     return is_root;
@@ -135,6 +137,7 @@ namespace dj {
                     work.data << pipe_input;
                     work.type_name = typeid(PipeInputType).name();
                     work.index_from = index();
+                    work.locale = locale_info::get_basic();
 
                     std::pair<uint, uint> identity = processor->get_rank_and_index_for(
                             enode_type::REDUCER, index(), enode_type::TASK, ""); // it defaults to root node
@@ -174,6 +177,7 @@ namespace dj {
                     work.type_name = typeid(OutputType).name();
                     work.index_from = index();
                     work.index_to = index();
+                    work.locale = locale_info::get_basic();
                     uint to = processor->get_root_reducer_rank(index());
 
                     processor->send(work, to);
@@ -207,6 +211,7 @@ namespace dj {
                     work.type_name = typeid(OutputType).name();
                     work.data << coordinator_output;
                     work.index_from = index();
+                    work.locale = locale_info::get_basic();
 
                     std::pair<uint, uint> identity = processor->get_rank_and_index_for(
                             enode_type::COORDINATOR, index(), enode_type::TASK, target); // it defaults to root node
