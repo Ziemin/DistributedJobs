@@ -51,6 +51,7 @@ namespace dj {
         locale_info(uint rank, std::string hostname, uint64_t timestamp);
         locale_info(locale_info&& other);
         locale_info(const locale_info& other) = default;
+        locale_info& operator=(const locale_info& other) = default;
         locale_info& operator=(locale_info&& other);
 
         static locale_info get_basic();

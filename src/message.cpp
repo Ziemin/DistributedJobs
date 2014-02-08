@@ -69,6 +69,8 @@ namespace dj {
         return { _context->rank, _context->hostname, context_info::get_current_timestamp() };
     }
 
+    const context_info* locale_info::_context = nullptr;
+
     work_unit::work_unit(ework_type work_type, std::string data, std::string type_name, locale_info locale)
         : work_type(work_type),
         type_name(std::move(type_name)),

@@ -10,6 +10,7 @@ using namespace dj;
 
 std::string last_string_input;
 int last_int_input;
+bool finish_handled;
 
 template <typename... Output>
     class simple_task : public base_task<Output...> {
@@ -26,7 +27,7 @@ template <typename... Output>
             }
 
             virtual void handle_finish() {
-                // do nothing
+                finish_handled = true;
             }
     }; 
 
@@ -63,8 +64,12 @@ BOOST_AUTO_TEST_SUITE(task_test)
         work.type_name = typeid(int).name();
         t.process_work(work, nullptr);
 
+        finish_handled = false;
+        t.handle_finish();
+
         BOOST_CHECK_EQUAL(int_input, last_int_input);
         BOOST_CHECK_EQUAL(string_input, last_string_input);
+        BOOST_CHECK(finish_handled == true);
     }
     
 BOOST_AUTO_TEST_SUITE_END ( )
