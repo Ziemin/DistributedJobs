@@ -43,7 +43,7 @@ namespace dj {
         tag = static_cast<int>(mes.end_type);
         archive << mes.from_rank;
         archive << mes.pass_number;
-        archive << mes.finished_count;
+        archive << mes.counter;
 
         data = os.str();
         return *this;
@@ -71,11 +71,18 @@ namespace dj {
 
     const context_info* locale_info::_context = nullptr;
 
-    work_unit::work_unit(ework_type work_type, std::string data, std::string type_name, locale_info locale)
+    work_unit::work_unit(ework_type work_type, 
+            std::string data, 
+            std::string type_name, 
+            locale_info locale,
+            int index_to,
+            int index_from)
         : work_type(work_type),
         type_name(std::move(type_name)),
         data(std::move(data)),
-        locale(std::move(locale)) 
+        index_to(index_to),
+        index_from(index_from),
+        locale(std::move(locale))
     { }
 
     work_unit& work_unit::operator=(work_unit&& other) {
@@ -108,7 +115,7 @@ namespace dj {
         end_type = static_cast<end_message::eend_message_type>(mes.tag);
         archive >> from_rank;
         archive >> pass_number;
-        archive >> finished_count;
+        archive >> counter;
 
         return *this;
     }

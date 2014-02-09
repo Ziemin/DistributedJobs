@@ -22,3 +22,6 @@ ADD_CUSTOM_TARGET(run COMMAND nodeClient DEPENDS ${nodeClient})
 
 # tests
 add_subdirectory(tests)
+
+#examples
+add_subdirectory(examples)

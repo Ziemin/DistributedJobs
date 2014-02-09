@@ -11,7 +11,7 @@ namespace dj {
     }
 
     execution_pipeline::execution_pipeline() 
-    : _inputer(new input::multi_stdin_input<int>()) 
+    : _inputer(new input::single_stdin_input<int>()) 
     { }
 
     execution_pipeline::execution_pipeline(std::unique_ptr<input_provider> inputer) 

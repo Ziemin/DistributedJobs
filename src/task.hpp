@@ -3,6 +3,7 @@
 
 #include <string>
 #include <type_traits>
+#include <iostream>
 #include "node.hpp"
 #include "template_utils.hpp"
 #include "executor.hpp"
@@ -46,6 +47,7 @@ namespace dj {
                  */
                 template <typename T, enode_type TargetType>
                     void emit(const T& value, const std::string& target="") const {
+                        using serialization::operator<<;
 
                         static_assert(is_any_same<T, OutputParameters...>{}, 
                                 "Cannot emit value of undeclared output parameter");
@@ -64,9 +66,9 @@ namespace dj {
                                 identity = processor->get_rank_and_index_for(
                                         enode_type::TASK, index(), TargetType, target);
                                 if(TargetType == enode_type::REDUCER) 
-                                        result.work_type = work_unit::ework_type::REDUCER_REDUCE;
+                                    result.work_type = work_unit::ework_type::REDUCER_REDUCE;
                                 else
-                                        result.work_type = work_unit::ework_type::TASK_WORK_OUTPUT;
+                                    result.work_type = work_unit::ework_type::TASK_WORK_OUTPUT;
                             } catch(const node_exception& e) {
                                 try {
                                     if(TargetType == enode_type::REDUCER) {
@@ -89,7 +91,6 @@ namespace dj {
                             } catch(const node_exception& e) {
                                 throw std::runtime_error("Could not dispatch result of task anywhere");
                             }
-                            result.index_to = identity.second;
                             switch(TargetType) {
                                 case enode_type::TASK:
                                     result.work_type = work_unit::ework_type::TASK_WORK;
@@ -105,6 +106,7 @@ namespace dj {
                                     break;
                             }
                         }
+                        result.index_to = identity.second;
 
                         processor->send(result, identity.first);
                     }
@@ -126,11 +128,16 @@ namespace dj {
                     return is_root;
                 }
 
+                void set_as_root(bool value) {
+                    is_root = value;
+                }
+
             protected:
                 /**
                  * Sends output back to the first task in pipeline
                  */
                 void pass_again(const PipeInputType& pipe_input) {
+                    using serialization::operator<<;
 
                     work_unit work;
                     work.work_type = work_unit::ework_type::INPUT_WORK;
@@ -151,6 +158,7 @@ namespace dj {
                  * Returns reduced output
                  */
                 void return_output(const OutputType& output) {
+                    using serialization::operator<<;
                     work_unit work;
                     work.work_type = work_unit::ework_type::REDUCER_WORK_OUTPUT;
                     work.data << output;
@@ -184,11 +192,6 @@ namespace dj {
                 }
 
             private:
-                friend class reducer_node;
-                void set_as_root(bool value) {
-                    is_root = value;
-                }
-
                 bool is_root = false;
         };
 
@@ -206,6 +209,7 @@ namespace dj {
                  */
                 void broadcast(const OutputType& coordinator_output, const std::string& target="") {
 
+                    using serialization::operator<<;
                     work_unit work;
                     work.work_type = work_unit::ework_type::COORDINATOR_OUTPUT;
                     work.type_name = typeid(OutputType).name();

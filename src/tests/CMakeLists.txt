@@ -35,7 +35,6 @@ foreach(file ${TEST_FILES})
     LIST(APPEND TEST_NAMES ${base_name})
 endforeach()
 
-message(${LIBRARY_OUTPUT_PATH})
 message("--   Tests found:")
 foreach(test ${TEST_NAMES})
     message("--    " ${test})

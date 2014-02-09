@@ -84,7 +84,13 @@ namespace dj {
             TASK_WORK_OUTPUT
         };
 
-        work_unit(ework_type work_type, std::string data, std::string type_name, locale_info locale);
+        work_unit(ework_type work_type, 
+                std::string data, 
+                std::string type_name, 
+                locale_info locale, 
+                int index_to, 
+                int index_from);
+
         work_unit() = default;
         work_unit(const work_unit& other) = default;
         work_unit(work_unit&& other);
@@ -103,21 +109,21 @@ namespace dj {
         locale_info locale;
 
         template <typename T>
-            static work_unit get_basic(const T& t, work_unit::ework_type work_type) {
+            static work_unit get_basic(const T& t, work_unit::ework_type work_type, int index_to, int index_from) {
 
                 std::ostringstream os;
                 boost::archive::binary_oarchive archive(os, boost::archive::no_header);
                 archive << t;
-                return work_unit(work_type, os.str(), typeid(T).name(), locale_info::get_basic());
+                return work_unit(work_type, os.str(), typeid(T).name(), locale_info::get_basic(), index_to, index_from);
             }
     };
 
     struct end_message {
         uint from_rank;
         uint pass_number; 
-        uint finished_count; // how many processes are finished in this pass with defined end_type
+        uint counter; 
         enum class eend_message_type {
-            TASK_END = static_cast<int>(work_unit::ework_type::TASK_WORK_OUTPUT),
+            TASK_END = static_cast<int>(work_unit::ework_type::TASK_WORK_OUTPUT)+1,
             REDUCTION_END,
             WORK_END
         };

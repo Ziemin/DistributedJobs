@@ -31,15 +31,6 @@ template <typename... Output>
             }
     }; 
 
-void operator>>(std::string input, std::string& output) {
-    output = input;
-}
-
-void operator>>(std::string input, int& output) {
-    output = std::stoi(input);
-}
-
-
 simple_task<std::string, int> task_instance;
 
 BOOST_AUTO_TEST_SUITE(task_test)
@@ -50,17 +41,20 @@ BOOST_AUTO_TEST_SUITE(task_test)
     }
 
     BOOST_AUTO_TEST_CASE(in_node_test) {
+        using serialization::operator<<;
+        using serialization::operator>>;
 
         task<simple_task<int, std::string>, std::string, int> t("simple_task_node");
         work_unit work;
         std::string string_input = "blabla";
         int int_input = 9;
 
-        work.data = string_input;
+        work.data << string_input;
         work.type_name = typeid(std::string).name();
+        work.work_type = work_unit::ework_type::TASK_WORK;
         t.process_work(work, nullptr);
 
-        work.data = std::to_string(int_input);
+        work.data << int_input;
         work.type_name = typeid(int).name();
         t.process_work(work, nullptr);
 

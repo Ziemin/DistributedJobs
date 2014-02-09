@@ -137,6 +137,7 @@ namespace dj {
             void set_reducers_count(int number);
             int reducers_count() const;
             virtual void set_as_root(bool value) = 0;
+            virtual bool is_root_reducer() = 0;
 
         private:
 
@@ -276,6 +277,8 @@ namespace dj {
                 struct type_checker {
 
                         bool operator()(const work_unit& work, base_node* parent, Task<OutputParameters...>& task) const {
+                            using serialization::operator>>;
+
                             if(work.type_name != typeid(T).name()) 
                                 return false;
 
@@ -380,6 +383,7 @@ namespace dj {
                     }
 
                 virtual void process_work(const work_unit& work, base_node* parent) {
+                    using serialization::operator>>;
 
                     if(work.type_name != typeid(CoordinatorInput).name()) 
                         throw std::runtime_error(
@@ -429,11 +433,16 @@ namespace dj {
                     _reducer.set_as_root(value);
                 }
 
+                virtual bool is_root_reducer() {
+                    return _reducer.is_root_reducer();
+                }
+
                 virtual void handle_finish() {
                     _reducer.handle_finish();
                 }
 
                 virtual void process_work(const work_unit& work, base_node* parent) {
+                    using serialization::operator>>;
 
                     if(work.type_name != typeid(ReducerInput).name() || work.type_name != typeid(ReducerOutput).name()) 
                         throw std::runtime_error(
@@ -517,6 +526,7 @@ namespace dj {
                 }
 
                 virtual void process_work(const work_unit& work, base_node* parent) {
+                    using serialization::operator>>;
 
                     if(work.type_name != typeid(OutputerInput).name()) 
                         throw std::runtime_error(
@@ -524,8 +534,7 @@ namespace dj {
 
                     OutputerInput  work_data;
                     work.data >> work_data;
-
-                    _outputer()(work_data, parent->name());
+                    _outputer(work_data, parent->name());
                 }
 
             private:

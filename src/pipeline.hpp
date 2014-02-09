@@ -2,6 +2,7 @@
 #define PIPELINE_HPP
 
 #include <iostream>
+#include <fstream>
 #include "node.hpp"
 #include "executor.hpp"
 
@@ -38,19 +39,45 @@ namespace dj {
          * Every process reads his own input
          */
         template <typename T> 
-            class multi_stdin_input : public input_provider {
+            class single_stdin_input : public input_provider {
 
                 public:
 
                     virtual void operator()() {
 
                         T in_val;
-                        while(std::cin.eof()) {
-                            std::cin >> in_val;
+                        while(std::cin >> in_val) {
                             add_input(in_val);
                         }
                         eof_callback();
                     }
+            };
+
+        template <typename T> 
+            class multi_file_input_provider : public input_provider {
+
+                public:
+                    multi_file_input_provider(std::vector<std::string> filenames) 
+                        : filenames(std::move(filenames)) 
+                    { }
+
+                    virtual void operator()() {
+
+                        for(int i = processor->context().rank; 
+                                i < filenames.size(); i += processor->context().size) 
+                        {
+                            T in_val;
+                            std::ifstream ifs(filenames[i]);
+                            while(ifs >> in_val) {
+                                add_input(in_val);
+                            }
+                        }
+
+                        eof_callback();
+                    }
+
+               private:
+                    std::vector<std::string> filenames;
             };
         
     }

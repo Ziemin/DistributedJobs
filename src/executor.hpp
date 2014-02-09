@@ -39,7 +39,7 @@ namespace dj {
                 template<typename T>
                     void enqueue_input(const T& input) {
                         qd_work.push(new work_unit(
-                                    work_unit::get_basic(input, work_unit::ework_type::INPUT_WORK)));
+                                    work_unit::get_basic(input, work_unit::ework_type::INPUT_WORK, 0, 0)));
                     }
 
                 void send(const work_unit& work, int to);
@@ -66,9 +66,13 @@ namespace dj {
                 void request_data();
                 void compute_work(work_unit& work);
                 void eof_callback();
-                void tell_about_the_end(end_message::eend_message_type end_type, uint done); // sounds so sad...
+                void tell_about_the_end(// sounds so sad...
+                        end_message::eend_message_type end_type, uint counter, uint from_rank, uint pass_number); 
 
                 void process_end_message(end_message& mes, bool had_work);
+                void process_task_end_message(end_message& mes, bool had_work);
+                void process_reduction_end_message(end_message& mes, bool had_work);
+                void process_work_end_message(end_message& mes, bool had_work);
 
                 void finish_all_tasks();
                 void finish_all_reducers();
@@ -85,9 +89,9 @@ namespace dj {
                 uint current_pass;
 
                 std::deque<end_message*> end_que;
+                std::deque<end_message*> wait_end_que;
                 // mpi request
                 boost::mpi::request receive_request;
-                boost::optional<mpi::status> req_status;
                 // buffer
                 std::string buffer; 
 

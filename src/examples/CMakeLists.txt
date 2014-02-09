@@ -1,24 +1,47 @@
-cmake_minimum_required(VERSION 3.8.9)
-
-project(dj_examples)
-
-set(ENV{OMPI_CXX} "clang++")
-set(CMAKE_CXX_COMPILER             mpicxx)
-set(CMAKE_CXX_FLAGS                "-Wall -std=c++11")
-set(CMAKE_CXX_FLAGS_DEBUG          "-g")
-set(CMAKE_CXX_FLAGS_MINSIZEREL     "-Os -DNDEBUG")
-set(CMAKE_CXX_FLAGS_RELEASE        "-O4 -DNDEBUG")
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g")
-
-set(CMAKE_LINKER  "/usr/bin/llvm-ld")
+MACRO(SUBDIRLIST result curdir)
+  FILE(GLOB children RELATIVE ${curdir} ${curdir}/*)
+  SET(dirlist "")
+  FOREACH(child ${children})
+    IF(IS_DIRECTORY ${curdir}/${child})
+        SET(dirlist ${dirlist} ${child})
+    ENDIF()
+  ENDFOREACH()
+  SET(${result} ${dirlist})
+ENDMACRO()
 
 find_package(Boost COMPONENTS mpi thread system date_time serialization unit_test_framework REQUIRED)
 find_package(Threads REQUIRED)
 
-ADD_DEFINITIONS(-DBOOST_ALL_DYN_LINK)
-ADD_DEFINITIONS(-DBOOST_TEST_DYN_LINK)
-
 link_directories( ${Boost_LIBRARY_DIRS} )
 include_directories( ${Boost_INCLUDE_DIRS} )
 
-SET(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${dj_examples_SOURCE_DIR}/bin)
+SET(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${dj_SOURCE_DIR}/bin/examples)
+
+SET(TEST_PROPS -log_level=all)
+ADD_DEFINITIONS(-DBOOST_ALL_DYN_LINK)
+
+message("-- Adding examples:")
+
+set(EXAMPLE_NAMES "")
+
+file(GLOB_RECURSE EXAMPLE_FILES "*.cpp")
+foreach(file ${EXAMPLE_FILES})
+
+    get_filename_component(base_name ${file} NAME_WE)
+    get_filename_component(full_name ${file} NAME)
+
+    add_executable(${base_name} ${file})
+
+    target_link_libraries (${base_name} ${Boost_LIBRARIES})
+    target_link_libraries (${base_name} ${Boost_SYSTEM_LIBRARY})
+    target_link_libraries (${base_name} ${CMAKE_THREAD_LIBS_INIT})
+    target_link_libraries (${base_name} dj)
+
+    LIST(APPEND EXAMPLE_NAMES ${base_name})
+endforeach()
+
+message("--   Examples found:")
+foreach(ex ${EXAMPLE_NAMES})
+    message("--    " ${ex})
+endforeach()
+

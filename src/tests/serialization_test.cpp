@@ -26,9 +26,9 @@ BOOST_AUTO_TEST_SUITE(serialization_test)
 
         uint from_rank = 1;
         uint pass_number = 2;
-        uint finished_count = 3;
+        uint counter = 3;
         end_message::eend_message_type end_type = end_message::eend_message_type::WORK_END;
-        end_message end_mes { from_rank, pass_number, finished_count, end_type };
+        end_message end_mes { from_rank, pass_number, counter, end_type };
 
         message mes;
         mes << end_mes;
@@ -39,7 +39,7 @@ BOOST_AUTO_TEST_SUITE(serialization_test)
 
         BOOST_CHECK_EQUAL(end_mes_d.from_rank, from_rank);
         BOOST_CHECK_EQUAL(end_mes_d.pass_number, pass_number);
-        BOOST_CHECK_EQUAL(end_mes_d.finished_count, finished_count);
+        BOOST_CHECK_EQUAL(end_mes_d.counter, counter);
         BOOST_CHECK(end_mes_d.end_type ==  end_type);
     }
 

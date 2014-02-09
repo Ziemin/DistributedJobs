@@ -1,0 +1,10 @@
+#ifndef DISTRIBUTED_JOBS
+#define DISTRIBUTED_JOBS
+
+#include "pipeline.hpp"
+#include "message.hpp"
+#include "node.hpp"
+#include "executor.hpp"
+#include "task.hpp"
+
+#endif
