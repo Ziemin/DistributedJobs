@@ -444,7 +444,7 @@ namespace dj {
                 virtual void process_work(const work_unit& work, base_node* parent) {
                     using serialization::operator>>;
 
-                    if(work.type_name != typeid(ReducerInput).name() || work.type_name != typeid(ReducerOutput).name()) 
+                    if(work.type_name != typeid(ReducerInput).name() && work.type_name != typeid(ReducerOutput).name()) 
                         throw std::runtime_error(
                                 std::string("Input for reducer is not of type: ") + typeid(ReducerInput).name());
 
