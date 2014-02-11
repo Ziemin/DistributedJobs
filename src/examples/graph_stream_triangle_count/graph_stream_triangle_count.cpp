@@ -197,13 +197,15 @@ template <>
         coordinator() : dj::base_coordinator<coordinator_message, coordinator_message>("coordinator") { }
 
         virtual void coordinate(const coordinator_message& input, const std::string& /* parent */) override {
-            if(input.b == 1 && input.w < g1) {
+            if(input.b == 1 && g1 < input.w) {
                 g1 = input.w;
                 broadcast(input, "site");
-            } else if(input.b == 2 && input.w < g2) {
+            } else if(input.b == 2 && g2 < input.w) {
                 g2 = input.w;
                 broadcast(input, "site");
             }
+            g1 = input.w;
+            g2 = input.w;
         }
 
         virtual void handle_finish() override { }
