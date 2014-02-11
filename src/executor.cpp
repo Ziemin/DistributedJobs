@@ -59,8 +59,9 @@ namespace dj {
             sent_task_end = false;
             sent_reduction_end = false;
             sent_work_end = false;
+            going_again = false;
             finished = 0;
-            current_pass = 0;
+            pass_number = 0;
             c_s = computation_stage::INPUT_READ;
 
             boost::optional<mpi::status> req_status;
@@ -86,12 +87,17 @@ namespace dj {
                     new_work.reset(work_ptr);
                     compute_work(*new_work);
                 }
-                // process messages related to final pass
-                while(!end_que.empty()) {
-                    end_mes.reset(end_que.front());
-                    end_que.pop_front();
-                    process_end_message(*end_mes.get(), had_work);
-                    // TODO passing again in reducers is ignored in current implementatino
+                if(going_again) {
+                    going_again = false; // we started recurrence
+                    reset_run();
+                }
+                // process messages related only if had no work previously
+                if(!had_work) {
+                    while(!end_que.empty()) {
+                        end_mes.reset(end_que.front());
+                        end_que.pop_front();
+                        process_end_message(*end_mes.get(), had_work);
+                    }
                 }
 
                 // check if new messages appeard
@@ -141,6 +147,7 @@ namespace dj {
             switch(work.work_type) {
                 case work_unit::ework_type::INPUT_WORK:
                     {
+                        reset_run();
                         // index to is not important in input work
                         work.work_type = work_unit::ework_type::TASK_WORK;
                         task_node* task_ptr = graph.task(pipeline.get_node_graph().root()->index());
@@ -261,6 +268,11 @@ namespace dj {
 
         void executor::send(const work_unit& work, int to) {
 
+            // going for recursion
+            if(work.work_type == work_unit::ework_type::INPUT_WORK) {
+                going_again = true;
+            }
+
             if(to != (int) _exec_context.rank) {
                 message mes; 
                 mes << work;
@@ -302,7 +314,12 @@ namespace dj {
         void executor::tell_about_the_end(// sounds so sad...
                 end_message::eend_message_type end_type, uint counter, uint from_rank, uint pass_number)
         {
-
+            //if(context().rank == 1) {
+                //std::cout << "telling about the end from: " << context().rank 
+                    //<< "pass: " << pass_number << " counter: " <<  counter << " type: " << (int) end_type << std::endl;
+                //std::cout << "current stage: " << (int) c_s << std::endl;
+                //std::cout << "encountered eof: " << encountered_eof << std::endl;
+            //}
             end_message end_mes { from_rank, pass_number, counter, end_type }; 
             message mes;
             mes << end_mes;
@@ -316,6 +333,9 @@ namespace dj {
         // TODO queue end_messages and change circle of death test
         void executor::process_end_message(end_message& mes, bool had_work) {
 
+            //if(context().rank == 1) 
+                //std::cout << "processing end : " << mes.from_rank
+                    //<< "pass: " << mes.pass_number << " counter: " <<  mes.counter << " type: " << (int) mes.end_type << std::endl;
             switch(mes.end_type) {
                 case end_message::eend_message_type::TASK_END:
                     process_task_end_message(mes, had_work);
@@ -353,21 +373,29 @@ namespace dj {
                         sent_task_end = false;
                 }
             } else {
+                bool tell_at_the_end = false;;
                 uint counter;
                 if(mes.pass_number == 1) {
                     if(!had_work && encountered_eof) counter = mes.counter+1;
                     else counter = mes.counter;
+                    tell_at_the_end = true;
                 } else {
                     if(!had_work && encountered_eof) {
+                        counter = mes.counter+1;
+                        tell_about_the_end(
+                                end_message::eend_message_type::TASK_END, counter, mes.from_rank, mes.pass_number);
                         if(mes.counter == _exec_context.size + abs(_exec_context.rank-mes.from_rank)) {
                             finish_all_tasks();
                             c_s = computation_stage::TASKS_END;
                         }
-                        counter = mes.counter+1;
-                    } else counter = mes.counter;
+                    } else {
+                        counter = mes.counter;
+                        tell_at_the_end = true;
+                    }
                 }
-                tell_about_the_end(
-                        end_message::eend_message_type::TASK_END, counter, mes.from_rank, mes.pass_number);
+                if(tell_at_the_end)
+                    tell_about_the_end(
+                            end_message::eend_message_type::TASK_END, counter, mes.from_rank, mes.pass_number);
             }
         }
 
@@ -394,21 +422,29 @@ namespace dj {
                         sent_task_end = false;
                 }
             } else {
+                bool tell_at_the_end = false;
                 uint counter;
                 if(mes.pass_number == 1) {
                     if(!had_work) counter = mes.counter+1;
                     else counter = mes.counter;
+                    tell_at_the_end = true;
                 } else {
                     if(!had_work) {
+                        counter = mes.counter+1;
+                        tell_about_the_end(
+                                end_message::eend_message_type::REDUCTION_END, counter, mes.from_rank, mes.pass_number);
                         if(mes.counter == _exec_context.size + abs(_exec_context.rank-mes.from_rank)) {
                             finish_all_reducers();
                             c_s = computation_stage::REDUCTION_END;
                         }
-                        counter = mes.counter+1;
-                    } else counter = mes.counter;
+                    } else {
+                        tell_at_the_end = true;
+                        counter = mes.counter;   
+                    }
                 }
-                tell_about_the_end(
-                        end_message::eend_message_type::REDUCTION_END, counter, mes.from_rank, mes.pass_number);
+                if(tell_at_the_end)
+                    tell_about_the_end(
+                            end_message::eend_message_type::REDUCTION_END, counter, mes.from_rank, mes.pass_number);
             }
         }
 
@@ -560,7 +596,14 @@ namespace dj {
         void executor::finish_all_reducers() {
             // TODO only finishing root reducer now
             auto& reducers = pipeline.get_node_graph().get_reducer_nodes();
-            for(auto& r: reducers) if(r->is_root_reducer()) r->handle_finish();
+            for(auto& r: reducers) r->handle_finish();
+        }
+
+        void executor::reset_run() {
+            c_s = computation_stage::INPUT_READ;
+            sent_task_end = false;
+            sent_reduction_end = false;
+            sent_work_end = false;
         }
 
     }

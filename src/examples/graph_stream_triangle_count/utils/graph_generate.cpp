@@ -35,17 +35,19 @@ int main(int argc, char* argv[]) {
 
     for(int i = 0; i < fn; i++) files[i].reset(new ofstream(bfname + to_string(i+1)));
 
-    mt19937 rng;
+    random_device rd;
+    mt19937 rng(rd());
     uniform_int_distribution<int> dist(0, vc-1);
     for(int i = 0; i < vc*vc; i++) {
         if(dist(rng)%2) {
             int u = dist(rng);
-            int v = dist(rng);
+            int v = u;
+            while(v == u) v = dist(rng);
             if(!is_edge(u,v)) {
                 add_edge(u,v);
-                *files[i%fn] << u << " " << v;
+                for(int k = 0; k < fn; k++) *files[k] << u << " " << v << endl;
             }
-        }
+        } 
     }
 
     int counter = 0;

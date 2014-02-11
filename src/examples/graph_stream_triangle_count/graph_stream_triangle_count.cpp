@@ -10,6 +10,7 @@
 #include <tuple>
 #include <random>
 #include <istream>
+#include <ostream>
 
 typedef std::mt19937 my_rng;
 
@@ -31,6 +32,11 @@ struct edge {
         return is;
     }
 
+    friend  std::ostream& operator<<(std::ostream& os, const edge& e) {
+        os << e.u << " " << e.v << std::endl;
+        return os;
+    }
+
     private:
         friend class boost::serialization::access;
         template<class Archive> void serialize(Archive& ar, const unsigned int /* version */) {
@@ -39,7 +45,7 @@ struct edge {
         }
 };
 
-bool is_adjacent(const edge& e1, const edge& e2) {
+inline bool is_adjacent(const edge& e1, const edge& e2) {
     if(e1.u == e2.u && e1 != e2) return true;
     if(e1.v == e2.u && e1 != e2) return true;
     if(e1.u == e2.v && e1 != e2) return true;
@@ -47,8 +53,21 @@ bool is_adjacent(const edge& e1, const edge& e2) {
     return false;
 }
 
-bool is_triangle(const edge& e1, const edge& e2, const edge& e3) {
-    return is_adjacent(e1, e2) && is_adjacent(e1, e3) && is_adjacent(e2, e3);
+inline bool is_star(const edge& e1, const edge& e2, const edge& e3) {
+    return 
+        (e1.u == e2.u && e1.u == e3.u) ||
+        (e1.u == e2.u && e1.u == e3.v) ||
+        (e1.u == e2.v && e1.u == e3.u) ||
+        (e1.u == e2.v && e1.u == e3.v) ||
+        (e1.v == e2.u && e1.v == e3.u) ||
+        (e1.v == e2.u && e1.v == e3.v) ||
+        (e1.v == e2.v && e1.v == e3.u) ||
+        (e1.v == e2.v && e1.v == e3.v);
+}
+
+inline bool is_triangle(const edge& e1, const edge& e2, const edge& e3) {
+    if(e1 == e2 || e1 == e3 || e2 == e3) return false;
+    return is_adjacent(e1, e2) && is_adjacent(e1, e3) && is_adjacent(e2, e3) && !is_star(e1, e2, e3);
 }
 
 struct coordinator_message {
@@ -69,7 +88,7 @@ struct coordinator_message {
 struct site_result {
 
     int c;
-    std::tuple<edge, edge, edge> t;
+    std::tuple<edge, edge, edge, bool> t;
     int m;
 
     private:
@@ -79,6 +98,7 @@ struct site_result {
             ar & std::get<0>(t);
             ar & std::get<1>(t);
             ar & std::get<2>(t);
+            ar & std::get<3>(t);
             ar & m;
         }
 };
@@ -92,9 +112,14 @@ template <>
 {
     public:
 
-        site() : dj::base_task<site_result, coordinator_message>("site"), dist(0, 1.0) { }
+        site() 
+            : dj::base_task<site_result, coordinator_message>("site"), rng(std::random_device{}()), dist(0, 1.0) 
+        { 
+            std::get<3>(t) = false;
+        }
 
         void operator()(const edge& e, const std::string& parent) {
+            m++;
             double w = dist(rng);
             // level 1 sampling
             bool sampled1 = false;
@@ -117,16 +142,20 @@ template <>
                 f2 = e;
                 has2 = true;
                 l2 = w;
-                emit<coordinator_message, dj::enode_type::COORDINATOR>({3, w, e}, "coordinator");
+                emit<coordinator_message, dj::enode_type::COORDINATOR>({2, w, e}, "coordinator");
             }
             // triangle completion
             if(!sampled1 && !sampled2) {
-                if(has1 && has2 && is_triangle(e, f1, f2)) t = std::make_tuple(e, f1, f2);
+                //std::cout << "edges:\n" << f1 << f2 << e;
+                if(has1 && has2 && is_triangle(e, f1, f2)) {
+                    std::cout << "triangle found" << std::endl;
+                    t = std::make_tuple(e, f1, f2, true);
+                }
             }
         }
 
         void operator()(const coordinator_message& cm, const std::string& parent) {
-            has_t = false;
+            std::get<3>(t) = false;
             if(cm.b == 1) {
                 has1 = true;
                 f1 = cm.e;
@@ -134,9 +163,9 @@ template <>
                 has2 = false;
                 c = 0;
             } else {
+                has2 = true;
                 f2 = cm.e;
                 l2 = cm.w;
-                has_t = false;
             }
         }
 
@@ -147,12 +176,12 @@ template <>
     private:
         my_rng rng;
         std::uniform_real_distribution<double> dist;
-        bool has1 = false, has2 = false, has_t = false;
+        bool has1 = false, has2 = false;
         edge f1, f2;
         int c = 0;
         int m = 0;
         double l1 = 1, l2 = 1;
-        std::tuple<edge, edge, edge> t;
+        std::tuple<edge, edge, edge, bool> t;
 };
 
 
@@ -168,10 +197,10 @@ template <>
         coordinator() : dj::base_coordinator<coordinator_message, coordinator_message>("coordinator") { }
 
         virtual void coordinate(const coordinator_message& input, const std::string& /* parent */) override {
-            if(input.b == 1 && g1 < input.w) {
+            if(input.b == 1 && input.w < g1) {
                 g1 = input.w;
                 broadcast(input, "site");
-            } else if(g2 < input.w) {
+            } else if(input.b == 2 && input.w < g2) {
                 g2 = input.w;
                 broadcast(input, "site");
             }
@@ -180,8 +209,8 @@ template <>
         virtual void handle_finish() override { }
 
     private:
-        int g1 = 1;
-        int g2 = 1;
+        double g1 = 1;
+        double g2 = 1;
 
 };
 
@@ -201,7 +230,10 @@ template <>
         virtual void reduce(const site_result& input, const std::string& parent) override {
             m += input.m;
             c += input.c;
-            found_triangle |= is_triangle(std::get<0>(input.t), std::get<1>(input.t), std::get<2>(input.t));
+            std::cout << "got: " << input.m << " " << input.c << std::endl
+                << std::get<0>(input.t) << " " << std::get<1>(input.t) << " " << std::get<2>(input.t) << std::endl;
+            if(std::get<3>(input.t))
+                found_triangle |= is_triangle(std::get<0>(input.t), std::get<1>(input.t), std::get<2>(input.t));
         }
 
         virtual void collect(const int& /* data_to_collect */) override {

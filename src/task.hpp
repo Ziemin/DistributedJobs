@@ -23,6 +23,8 @@ namespace dj {
             void set_node_index(int index);
             int index() const;
 
+            int world_size() const;
+            int rank() const;
             virtual void handle_finish() = 0; // no more data will be delivered in this pass
 
         private:
@@ -46,7 +48,7 @@ namespace dj {
                  * delivered to reducer if such is registered. The same for opposite site
                  */
                 template <typename T, enode_type TargetType>
-                    void emit(const T& value, const std::string& target="") const {
+                    void emit(const T& value, const std::string& target="", int rk=-2) const {
                         using serialization::operator<<;
 
                         static_assert(is_any_same<T, OutputParameters...>{}, 
@@ -108,7 +110,8 @@ namespace dj {
                         }
                         result.index_to = identity.second;
 
-                        processor->send(result, identity.first);
+                        if(rk == -2) processor->send(result, identity.first);
+                        else processor->send(result, rk);
                     }
         };
 
@@ -136,7 +139,7 @@ namespace dj {
                 /**
                  * Sends output back to the first task in pipeline
                  */
-                void pass_again(const PipeInputType& pipe_input) {
+                void pass_again(const PipeInputType& pipe_input, int rn=-2) {
                     using serialization::operator<<;
 
                     work_unit work;
@@ -151,7 +154,8 @@ namespace dj {
 
                     work.index_to = identity.second;
 
-                    processor->send(work, identity.first);
+                    if(rn == -2) processor->send(work, identity.first);
+                    else processor->send(work, rn);
                 }
 
                 /**

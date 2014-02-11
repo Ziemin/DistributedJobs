@@ -42,7 +42,7 @@ template <>
             }
 
             virtual void handle_finish() override {
-                return_output(accumulator);
+                if(is_root_reducer()) return_output(accumulator);
             }
 
         private:

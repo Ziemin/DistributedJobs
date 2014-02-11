@@ -44,11 +44,11 @@ namespace dj {
                 public:
 
                     virtual void operator()() {
-
                         T in_val;
-                        while(std::cin >> in_val) {
-                            add_input(in_val);
-                        }
+                        if(processor->context().rank == 0) 
+                            while(std::cin >> in_val) {
+                                add_input(in_val);
+                            }
                         eof_callback();
                     }
             };

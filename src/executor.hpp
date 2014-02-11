@@ -76,6 +76,7 @@ namespace dj {
 
                 void finish_all_tasks();
                 void finish_all_reducers();
+                void reset_run();
 
             private:
 
@@ -112,6 +113,8 @@ namespace dj {
                 bool sent_task_end;
                 bool sent_reduction_end;
                 bool sent_work_end;
+                bool going_again;
+                int pass_number;
         };
     }
 }
