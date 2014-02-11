@@ -1,0 +1,8 @@
+In order to generate input for map_reduce_bfs run:
+graph_generator <N> <E> <file> 
+where:
+    - N - vertex count
+    - E - number of edges in connected graph. 
+    - file - file with input for program
+graph_generator outputs standard sequential solution to the problem, so outputs of both programs can
+be compared to check if mpi implementation is correct.

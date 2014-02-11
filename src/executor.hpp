@@ -42,7 +42,7 @@ namespace dj {
                                     work_unit::get_basic(input, work_unit::ework_type::INPUT_WORK, 0, 0)));
                     }
 
-                void send(const work_unit& work, int to);
+                void send(work_unit& work, int to);
                 void async_send(const message& mes, int to);
                 void send(const message& mes, int to);
 
@@ -80,7 +80,7 @@ namespace dj {
 
             private:
 
-                enum class computation_stage { INPUT_READ, TASKS_END, REDUCTION_END, WORK_END } c_s;
+                ecomputation_phase phase;
                 mpi::environment env;
                 mpi::communicator world;
 

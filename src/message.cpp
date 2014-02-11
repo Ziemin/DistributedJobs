@@ -32,6 +32,7 @@ namespace dj {
         archive << work.locale;
         archive << work.index_to;
         archive << work.index_from;
+        archive << work.phase;
 
         data = os.str();
         return *this;
@@ -104,6 +105,7 @@ namespace dj {
         archive >> locale;
         archive >> index_to;
         archive >> index_from;
+        archive >> phase;
 
         return *this;
     }

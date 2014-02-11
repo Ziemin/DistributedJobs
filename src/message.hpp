@@ -29,6 +29,13 @@ namespace dj {
         static uint64_t get_current_timestamp();
     };
 
+    enum class ecomputation_phase {
+        TASKS,
+        REDUCTION,
+        PIPE_END,
+        WORK_END
+    };
+
     struct message {
         message() = default;
         message(int tag, std::string data);
@@ -107,6 +114,7 @@ namespace dj {
         uint index_to;
         uint index_from;
         locale_info locale;
+        ecomputation_phase phase;
 
         template <typename T>
             static work_unit get_basic(const T& t, work_unit::ework_type work_type, int index_to, int index_from) {

@@ -62,7 +62,7 @@ namespace dj {
             going_again = false;
             finished = 0;
             pass_number = 0;
-            c_s = computation_stage::INPUT_READ;
+            phase = ecomputation_phase::TASKS;
 
             boost::optional<mpi::status> req_status;
 
@@ -123,13 +123,13 @@ namespace dj {
                 // check if we should start a "circle of death"
                 // WARNING in current implementation only process with rank = 0 can start circle of death
                 } else if(encountered_eof && !had_work && _exec_context.rank == 0) { 
-                    if(!sent_task_end && c_s == computation_stage::INPUT_READ) {
+                    if(!sent_task_end && phase == ecomputation_phase::TASKS) {
                         tell_about_the_end(end_message::eend_message_type::TASK_END, 1, _exec_context.rank, 1);
                         sent_task_end = true;
-                    } else if(!sent_reduction_end && c_s == computation_stage::TASKS_END) {
+                    } else if(!sent_reduction_end && phase == ecomputation_phase::REDUCTION) {
                         tell_about_the_end(end_message::eend_message_type::REDUCTION_END, 1, _exec_context.rank, 1);
                         sent_reduction_end = true;
-                    } else if(!sent_work_end && c_s == computation_stage::REDUCTION_END) {
+                    } else if(!sent_work_end && phase == ecomputation_phase::PIPE_END) {
                         tell_about_the_end(end_message::eend_message_type::WORK_END, 1, _exec_context.rank, 1);
                         sent_work_end = true;
                     }
@@ -266,20 +266,20 @@ namespace dj {
             receive_request = world.irecv(mpi::any_source, mpi::any_tag, buffer); 
         }
 
-        void executor::send(const work_unit& work, int to) {
+        void executor::send(work_unit& work, int to) {
 
             // going for recursion
             if(work.work_type == work_unit::ework_type::INPUT_WORK) {
                 going_again = true;
             }
-
+            work.phase = phase;
             if(to != (int) _exec_context.rank) {
                 message mes; 
                 mes << work;
                 if(to == -1) // send to all other and process work myself
                     qd_work.push(new work_unit(work));
 
-                async_send(mes, to);
+                send(mes, to); // TODO async in current implemenation generates truncate errors in mpi
             } else {
                 qd_work.push(new work_unit(work));
             }
@@ -314,12 +314,6 @@ namespace dj {
         void executor::tell_about_the_end(// sounds so sad...
                 end_message::eend_message_type end_type, uint counter, uint from_rank, uint pass_number)
         {
-            //if(context().rank == 1) {
-                //std::cout << "telling about the end from: " << context().rank 
-                    //<< "pass: " << pass_number << " counter: " <<  counter << " type: " << (int) end_type << std::endl;
-                //std::cout << "current stage: " << (int) c_s << std::endl;
-                //std::cout << "encountered eof: " << encountered_eof << std::endl;
-            //}
             end_message end_mes { from_rank, pass_number, counter, end_type }; 
             message mes;
             mes << end_mes;
@@ -333,9 +327,6 @@ namespace dj {
         // TODO queue end_messages and change circle of death test
         void executor::process_end_message(end_message& mes, bool had_work) {
 
-            //if(context().rank == 1) 
-                //std::cout << "processing end : " << mes.from_rank
-                    //<< "pass: " << mes.pass_number << " counter: " <<  mes.counter << " type: " << (int) mes.end_type << std::endl;
             switch(mes.end_type) {
                 case end_message::eend_message_type::TASK_END:
                     process_task_end_message(mes, had_work);
@@ -351,7 +342,7 @@ namespace dj {
 
         void executor::process_task_end_message(end_message& mes, bool had_work) {
             // already finished that stage of work
-            if(c_s != computation_stage::INPUT_READ) { // we have alraedy left that state
+            if(phase != ecomputation_phase::TASKS) { // we have alraedy left that state
                 if(mes.from_rank == _exec_context.rank) return;
                 tell_about_the_end(
                         end_message::eend_message_type::TASK_END, mes.counter+1, mes.from_rank, mes.pass_number);
@@ -364,7 +355,7 @@ namespace dj {
                 } else if(mes.counter == 2*_exec_context.size) {
                     // now we can finish all tasks - everyone is done with them
                     finish_all_tasks();
-                    c_s = computation_stage::TASKS_END;
+                    phase = ecomputation_phase::REDUCTION;
                 } else {
                     if(mes.pass_number == 1 && mes.counter == _exec_context.size) 
                         tell_about_the_end(
@@ -386,7 +377,7 @@ namespace dj {
                                 end_message::eend_message_type::TASK_END, counter, mes.from_rank, mes.pass_number);
                         if(mes.counter == _exec_context.size + abs(_exec_context.rank-mes.from_rank)) {
                             finish_all_tasks();
-                            c_s = computation_stage::TASKS_END;
+                            phase = ecomputation_phase::REDUCTION;
                         }
                     } else {
                         counter = mes.counter;
@@ -400,12 +391,12 @@ namespace dj {
         }
 
         void executor::process_reduction_end_message(end_message& mes, bool had_work) {
-            if(c_s == computation_stage::REDUCTION_END || c_s == computation_stage::WORK_END) {
+            if(phase == ecomputation_phase::PIPE_END || phase == ecomputation_phase::WORK_END) {
                 if(mes.from_rank == _exec_context.rank) return;
                 tell_about_the_end(
                         end_message::eend_message_type::REDUCTION_END, mes.counter+1, mes.from_rank, mes.pass_number);
             }
-            else if(c_s == computation_stage::INPUT_READ) return;
+            else if(phase == ecomputation_phase::TASKS) return;
             if(mes.from_rank == _exec_context.rank) { // our message finished its circle
                 // we had some work, probably propagated it, we should refrain from finishing
                 if(had_work) {
@@ -413,7 +404,7 @@ namespace dj {
                 } else if(mes.counter == 2*_exec_context.size) {
                     // now we can finish all tasks - everyone is done with them
                     finish_all_reducers();
-                    c_s = computation_stage::REDUCTION_END;
+                    phase = ecomputation_phase::PIPE_END;
                 } else {
                     if(mes.pass_number == 1 && mes.counter == _exec_context.size) 
                         tell_about_the_end(
@@ -435,7 +426,7 @@ namespace dj {
                                 end_message::eend_message_type::REDUCTION_END, counter, mes.from_rank, mes.pass_number);
                         if(mes.counter == _exec_context.size + abs(_exec_context.rank-mes.from_rank)) {
                             finish_all_reducers();
-                            c_s = computation_stage::REDUCTION_END;
+                            phase = ecomputation_phase::PIPE_END;
                         }
                     } else {
                         tell_at_the_end = true;
@@ -449,20 +440,20 @@ namespace dj {
         }
 
         void executor::process_work_end_message(end_message& mes, bool had_work) {
-            if(c_s == computation_stage::WORK_END) {
+            if(phase == ecomputation_phase::WORK_END) {
                 if(mes.from_rank == _exec_context.rank) return;
                 tell_about_the_end(
                         end_message::eend_message_type::WORK_END, mes.counter+1, mes.from_rank, mes.pass_number);
                 return;
             }
-            else if(c_s != computation_stage::REDUCTION_END) return;
+            else if(phase != ecomputation_phase::PIPE_END) return;
             if(mes.from_rank == _exec_context.rank) { // our message finished its circle
                 // we had some work, probably propagated it, we should refrain from finishing
                 if(had_work) {
                     sent_work_end = false;
                 } else if(mes.counter == 2*_exec_context.size) {
                     is_finished = true;
-                    c_s = computation_stage::WORK_END;
+                    phase = ecomputation_phase::WORK_END;
                 } else {
                     if(mes.pass_number == 1 && mes.counter == _exec_context.size) 
                         tell_about_the_end(
@@ -479,7 +470,7 @@ namespace dj {
                     if(!had_work) {
                         if(mes.counter == _exec_context.size + abs(_exec_context.rank-mes.from_rank)) {
                             is_finished = true;
-                            c_s = computation_stage::WORK_END;
+                            phase = ecomputation_phase::WORK_END;
                         }
                         counter = mes.counter+1;
                     } else counter = mes.counter;
@@ -600,7 +591,10 @@ namespace dj {
         }
 
         void executor::reset_run() {
-            c_s = computation_stage::INPUT_READ;
+            if(phase == ecomputation_phase::REDUCTION) {
+                finish_all_reducers(); // not elegan way to recurance TODO sth better
+            }
+            phase = ecomputation_phase::TASKS;
             sent_task_end = false;
             sent_reduction_end = false;
             sent_work_end = false;

@@ -53,6 +53,7 @@ BOOST_AUTO_TEST_SUITE(serialization_test)
         std::string hostname("host");
         work_unit::ework_type work_type = work_unit::ework_type::REDUCER_WORK_OUTPUT;
         locale_info locale(rank, hostname, timestamp);
+        ecomputation_phase phase = ecomputation_phase::WORK_END;
 
         work_unit work;
         work.index_to = index_to;
@@ -60,6 +61,7 @@ BOOST_AUTO_TEST_SUITE(serialization_test)
         work.work_type = work_type;
         work.data = data;
         work.locale = locale; 
+        work.phase = phase;
 
         message mes;
         mes << work;
@@ -75,6 +77,7 @@ BOOST_AUTO_TEST_SUITE(serialization_test)
         BOOST_CHECK_EQUAL(work_d.locale.rank, rank);
         BOOST_CHECK_EQUAL(work_d.locale.timestamp, timestamp);
         BOOST_CHECK_EQUAL(work_d.locale.hostname, hostname);
+        BOOST_CHECK(work.phase == phase);
     }
 
     BOOST_AUTO_TEST_CASE(custom_type_serialization) {
