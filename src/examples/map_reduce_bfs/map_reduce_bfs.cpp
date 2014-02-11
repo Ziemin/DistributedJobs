@@ -17,6 +17,7 @@
 
 using namespace std;
 
+// Node structure
 struct node {
     int id;
     vector<int> adj;
@@ -61,7 +62,7 @@ struct node {
 template <typename... OutputParameters>
     class mapper : public dj::base_task<OutputParameters...> { };
 
-// this job only emits its input to tripler
+// Maps incoming nodes to special tasks responsible for calculating new distance from 0 node
 template <>
     class mapper<node> : public dj::base_task<node> 
 {
@@ -109,7 +110,7 @@ template <>
 template <typename... OutputParameters>
     class site : public dj::base_task<OutputParameters...> { };
 
-// this job only emits its input to tripler
+// this job is responsible for calculation of new distance
 template <>
     class site<node> : public dj::base_task<node> 
 {
@@ -147,6 +148,7 @@ template <>
 template <typename PipeInputType, typename InputType, typename OutputType>
     class node_reducer : public dj::base_reducer<PipeInputType, InputType, OutputType> { };
 
+// This job upon completion sends new input to the mapper for the next pass
 template <>
     class node_reducer<node, node, node> : public dj::base_reducer<node, node, node> {
 
